@@ -187,7 +187,7 @@ module.exports = {
     try {
       // req.user is set by the auth middleware
       const user = await User.findByPk(req.user.id, {
-        attributes: { id, name, email, role, is_verified, is_active, created_at, updated_at },
+        attributes: { exclude: ['password'] },
         include: [{ model: Unit, as: 'unit_kerja' }]
       });
 
