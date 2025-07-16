@@ -32,7 +32,7 @@ module.exports = {
         onDelete: 'SET NULL',
       },
       role: {
-        type: Sequelize.TEXT,
+        type: Sequelize.STRING(50),
         allowNull: false,
       },
       is_verified: {

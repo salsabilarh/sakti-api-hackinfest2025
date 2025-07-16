@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     role: {
-      type: DataTypes.TEXT,
+      type: DataTypes.STRING(50),
       allowNull: false
     },
     is_verified: {
