@@ -190,7 +190,7 @@ module.exports = {
         include: [{
           model: Unit,
           as: 'unit_kerja',
-          attributes: ['nama'] // Ambil hanya nama unit
+          attributes: ['name']
         }]
       });
 
@@ -201,7 +201,7 @@ module.exports = {
       // Transformasi: ubah object unit_kerja menjadi string nama
       const response = {
         ...user.get({ plain: true }), // Konversi ke plain object
-        unit_kerja: user.unit_kerja ? user.unit_kerja.nama : null // Ambil hanya nama
+        unit_kerja: user.unit_kerja ? user.unit_kerja.name : null // Ambil hanya nama
       };
 
       res.json(response);
