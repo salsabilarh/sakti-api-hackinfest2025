@@ -168,7 +168,7 @@ module.exports = {
   resetPassword: async (req, res) => {
     try {
       const { id } = req.params;
-      const { newPassword } = "password123";
+      const { newPassword } = req.body;
 
       const user = await User.findByPk(id);
       if (!user) {
