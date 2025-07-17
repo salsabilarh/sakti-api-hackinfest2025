@@ -186,7 +186,7 @@ module.exports = {
   getMe: async (req, res) => {
     try {
       const user = await User.findByPk(req.user.id, {
-        attributes: { exclude: ['password'] },
+        attributes: { exclude: ['password', 'unit_kerja_id'] },
         include: [{
           model: Unit,
           as: 'unit_kerja',
