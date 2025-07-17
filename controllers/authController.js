@@ -214,28 +214,53 @@ module.exports = {
   updatePassword: async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
-      const user = await User.findByPk(req.user.id);
+      
+      // Validasi input
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: 'Current and new password are required' });
+      }
 
+      const user = await User.findByPk(req.user.id);
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Verifikasi password lama
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(400).json({ message: 'Current password is incorrect' });
+      // Verifikasi password lama dengan Argon2
+      try {
+        const isMatch = await argon2.verify(user.password, currentPassword);
+        if (!isMatch) {
+          return res.status(400).json({ message: 'Current password is incorrect' });
+        }
+      } catch (verifyError) {
+        console.error('Password verification error:', verifyError);
+        return res.status(500).json({ message: 'Error verifying password' });
       }
 
-      // Hash password baru
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      // Hash password baru dengan Argon2
+      try {
+        const hashedPassword = await argon2.hash(newPassword, {
+          type: argon2.argon2id, // Rekomendasi OWASP
+          memoryCost: 19456,    // 19MB
+          timeCost: 2,          // Iterasi
+          parallelism: 1        // Threads
+        });
 
-      // Update password
-      await user.update({ password: hashedPassword });
-
-      res.json({ message: 'Password updated successfully' });
+        await user.update({ password: hashedPassword });
+        
+        res.json({ 
+          message: 'Password updated successfully',
+          success: true
+        });
+      } catch (hashError) {
+        console.error('Hashing error:', hashError);
+        res.status(500).json({ message: 'Error hashing new password' });
+      }
     } catch (error) {
       console.error('Update password error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   }
 };
