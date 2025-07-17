@@ -169,27 +169,17 @@ module.exports = {
       const { 
         sub_portfolio_id, 
         name, 
-        code, 
         sectors, 
         intro_video_url,
         ...serviceData 
       } = req.body;
 
       // Validasi input
-      if (!sub_portfolio_id || !name || !code) {
+      if (!sub_portfolio_id || !name) {
         await transaction.rollback();
         return res.status(400).json({
           status: 'error',
-          message: 'sub_portfolio_id, name, and code are required fields'
-        });
-      }
-
-      // Validasi URL video jika ada
-      if (intro_video_url && !isValidVideoUrl(intro_video_url)) {
-        await transaction.rollback();
-        return res.status(400).json({
-          status: 'error',
-          message: 'Invalid video URL format'
+          message: 'sub_portfolio_id and name are required fields'
         });
       }
 
@@ -210,9 +200,38 @@ module.exports = {
         });
       }
 
-      // Cek kode service unik
+      // Cari service terakhir dengan sub portofolio yang sama
+      const lastService = await Service.findOne({
+        where: {
+          sub_portofolio_id: sub_portfolio_id
+        },
+        order: [['code', 'DESC']],
+        transaction
+      });
+
+      // Generate kode baru
+      let newCode;
+      if (!lastService) {
+        // Jika belum ada service untuk sub portofolio ini
+        newCode = `${subPortfolio.code}A`;
+      } else {
+        // Ambil huruf terakhir dari kode
+        const lastChar = lastService.code.slice(-1);
+        
+        // Generate huruf berikutnya (A->B, Z->AA)
+        if (lastChar.match(/[A-Y]/i)) {
+          const nextChar = String.fromCharCode(lastChar.charCodeAt(0) + 1);
+          newCode = `${subPortfolio.code}${nextChar}`;
+        } else {
+          // Jika mencapai Z, tambah huruf (Z->AA)
+          const baseCode = lastService.code.slice(0, -1);
+          newCode = `${baseCode}A${lastChar === 'Z' ? 'A' : ''}`;
+        }
+      }
+
+      // Validasi kode unik (untuk memastikan)
       const existingService = await Service.findOne({ 
-        where: { code },
+        where: { code: newCode },
         transaction
       });
       
@@ -220,15 +239,15 @@ module.exports = {
         await transaction.rollback();
         return res.status(409).json({
           status: 'error',
-          message: 'Service code already exists'
+          message: 'Generated service code already exists'
         });
       }
 
-      // Buat service
+      // Buat service dengan kode yang di-generate
       const newService = await Service.create({
         ...serviceData,
         name,
-        code,
+        code: newCode, // Gunakan kode yang di-generate
         intro_video_url: intro_video_url || null,
         sub_portofolio_id: sub_portfolio_id
       }, { transaction });
@@ -277,35 +296,17 @@ module.exports = {
         ]
       });
 
-      res.status(201).json({
+      return res.status(201).json({
         status: 'success',
-        message: 'Service created successfully',
-        data: {
-          id: createdService.id,
-          code: createdService.code,
-          name: createdService.name,
-          introVideoUrl: createdService.intro_video_url,
-          portfolio: {
-            id: createdService.sub_portofolio.portofolio.id,
-            name: createdService.sub_portofolio.portofolio.name
-          },
-          subPortfolio: {
-            id: createdService.sub_portofolio.id,
-            name: createdService.sub_portofolio.name
-          },
-          sectors: createdService.sectors.map(sector => ({
-            id: sector.id,
-            code: sector.code,
-            name: sector.name
-          }))
-        }
+        data: createdService
       });
+
     } catch (error) {
       await transaction.rollback();
-      console.error('Create service error:', error);
-      res.status(500).json({ 
+      console.error('Error creating service:', error);
+      return res.status(500).json({
         status: 'error',
-        message: 'Internal server error',
+        message: 'Failed to create service',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
