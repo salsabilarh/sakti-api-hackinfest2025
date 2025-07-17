@@ -5,35 +5,36 @@ require('dotenv').config();
 const authMiddleware = {
   // Protect routes - require authentication
   protect: async (req, res, next) => {
-    let token;
-
-    // Get token from header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token' });
-    }
-
     try {
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      let token;
 
-      // Fetch full user from DB
-      const user = await User.findByPk(decoded.id, {
-        include: [{ model: Unit, as: 'unit_kerja' }]
-      });
-
-      if (!user) {
-        return res.status(401).json({ message: 'User not found or unauthorized' });
+      // Ambil token dari Authorization header
+      if (
+        req.headers.authorization &&
+        req.headers.authorization.startsWith('Bearer')
+      ) {
+        token = req.headers.authorization.split(' ')[1];
       }
 
-      req.user = user; // Simpan user lengkap ke request
+      if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
+      }
+
+      // Verifikasi token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Cari user berdasarkan ID dari token
+      const user = await User.findByPk(decoded.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      req.user = user;
       next();
     } catch (error) {
-      console.error('Token verification error:', error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      console.error('Auth middleware error:', error.message);
+      return res.status(401).json({ message: 'Unauthorized', error: error.message });
     }
   },
 
