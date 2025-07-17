@@ -185,19 +185,56 @@ module.exports = {
   // Get current user profile
   getMe: async (req, res) => {
     try {
-      // req.user is set by the auth middleware
       const user = await User.findByPk(req.user.id, {
         attributes: { exclude: ['password'] },
-        include: [{ model: Unit, as: 'unit_kerja' }]
+        include: [{
+          model: Unit,
+          as: 'unit_kerja',
+          attributes: ['nama'] // Ambil hanya nama unit
+        }]
       });
 
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      res.json(user);
+      // Transformasi: ubah object unit_kerja menjadi string nama
+      const response = {
+        ...user.get({ plain: true }), // Konversi ke plain object
+        unit_kerja: user.unit_kerja ? user.unit_kerja.nama : null // Ambil hanya nama
+      };
+
+      res.json(response);
     } catch (error) {
       console.error('Get profile error:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+
+  updatePassword: async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const user = await User.findByPk(req.user.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Verifikasi password lama
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Current password is incorrect' });
+      }
+
+      // Hash password baru
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update password
+      await user.update({ password: hashedPassword });
+
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Update password error:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   }
