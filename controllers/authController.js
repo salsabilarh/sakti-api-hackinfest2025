@@ -215,51 +215,81 @@ module.exports = {
     try {
       const { currentPassword, newPassword } = req.body;
       
-      // Validasi input
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: 'Current and new password are required' });
+      // Validasi input lebih ketat
+      if (!currentPassword || typeof currentPassword !== 'string' || currentPassword.trim() === '') {
+        return res.status(400).json({ message: 'Current password is required and must be a non-empty string' });
+      }
+      
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.trim() === '') {
+        return res.status(400).json({ message: 'New password is required and must be a non-empty string' });
       }
 
-      const user = await User.findByPk(req.user.id);
+      const user = await User.findByPk(req.user.id, {
+        attributes: ['id', 'password'] // Hanya ambil field yang diperlukan
+      });
+
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Verifikasi password lama dengan Argon2
-      try {
-        const isMatch = await argon2.verify(user.password, currentPassword);
-        if (!isMatch) {
-          return res.status(400).json({ message: 'Current password is incorrect' });
-        }
-      } catch (verifyError) {
-        console.error('Password verification error:', verifyError);
-        return res.status(500).json({ message: 'Error verifying password' });
+      // Pastikan user memiliki password yang valid di database
+      if (!user.password || typeof user.password !== 'string' || user.password.trim() === '') {
+        console.error('Invalid password hash in database for user:', user.id);
+        return res.status(500).json({ message: 'Invalid password configuration' });
       }
 
-      // Hash password baru dengan Argon2
+      // Verifikasi password lama
+      let isMatch;
       try {
-        const hashedPassword = await argon2.hash(newPassword, {
-          type: argon2.argon2id, // Rekomendasi OWASP
-          memoryCost: 19456,    // 19MB
-          timeCost: 2,          // Iterasi
-          parallelism: 1        // Threads
+        isMatch = await argon2.verify(user.password, currentPassword);
+      } catch (verifyError) {
+        console.error('Password verification failed:', {
+          userId: user.id,
+          error: verifyError,
+          hashType: typeof user.password,
+          hashLength: user.password.length
         });
+        return res.status(500).json({ message: 'Password verification failed' });
+      }
 
-        await user.update({ password: hashedPassword });
-        
-        res.json({ 
-          message: 'Password updated successfully',
-          success: true
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Current password is incorrect' });
+      }
+
+      // Hash password baru
+      let hashedPassword;
+      try {
+        hashedPassword = await argon2.hash(newPassword, {
+          type: argon2.argon2id,
+          memoryCost: 19456,
+          timeCost: 2,
+          parallelism: 1
         });
       } catch (hashError) {
-        console.error('Hashing error:', hashError);
-        res.status(500).json({ message: 'Error hashing new password' });
+        console.error('Password hashing failed:', hashError);
+        return res.status(500).json({ message: 'Failed to hash new password' });
       }
+
+      // Update password
+      try {
+        await user.update({ password: hashedPassword });
+        return res.json({ 
+          success: true,
+          message: 'Password updated successfully'
+        });
+      } catch (updateError) {
+        console.error('Password update failed:', updateError);
+        return res.status(500).json({ message: 'Failed to update password' });
+      }
+
     } catch (error) {
-      console.error('Update password error:', error);
-      res.status(500).json({ 
+      console.error('Update password controller error:', error);
+      return res.status(500).json({ 
         message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        ...(process.env.NODE_ENV === 'development' && { 
+          error: error.message,
+          stack: error.stack 
+        })
       });
     }
   }
