@@ -1,4 +1,4 @@
-const { Deal, Project, Service, Sector } = require('../models');
+const { Deal, Project, Service, Sector, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 const analyticsController = {
