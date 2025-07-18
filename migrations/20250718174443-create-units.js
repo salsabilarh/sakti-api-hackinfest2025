@@ -20,7 +20,7 @@ module.exports = {
         unique: true,
       },
       type: {
-        type: Sequelize.ENUM('sbu', 'ppk', 'cabang'),
+        type: Sequelize.ENUM('sbu', 'ppk', 'cabang', 'admin'),
         allowNull: false,
       },
       created_at: {
