@@ -74,21 +74,25 @@ exports.login = async (req, res) => {
     // Cari user berdasarkan email
     const user = await User.findOne({
       where: { email },
-      include: ['unit'],
+      include: [
+        {
+          association: 'unit',
+          attributes: ['id', 'name', 'code', 'type'],
+        },
+      ],
     });
 
+    // Cek jika user tidak ditemukan
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    // Validasi apakah password ada dan string
+    // Validasi password
     if (!user.password || typeof user.password !== 'string') {
-      return res.status(401).json({ error: 'Invalid credentials. Password missing or corrupted.' });
+      return res.status(401).json({ error: 'Password is missing or corrupted.' });
     }
 
-    // Verifikasi password
     const isPasswordValid = await argon2.verify(user.password, password);
-
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -98,18 +102,21 @@ exports.login = async (req, res) => {
       return res.status(403).json({ error: 'Account is inactive.' });
     }
 
-    // Buat token JWT
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-      expiresIn: '1d',
-    });
+    // Cek apakah user sudah diverifikasi (jika kamu pakai sistem verifikasi)
+    if (user.is_verified === false || user.is_verified === null) {
+      return res.status(403).json({ error: 'Account is not verified yet.' });
+    }
+
+    // Buat token
+    const token = generateToken(user);
 
     // Kirim response
-    res.json({
+    return res.json({
       message: 'Login successful',
       token,
       user: {
         id: user.id,
-        name: user.name,
+        full_name: user.full_name,
         email: user.email,
         role: user.role,
         unit: user.unit ? user.unit.name : null,
@@ -117,7 +124,7 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Login failed due to server error.' });
+    return res.status(500).json({ error: 'Login failed due to server error.' });
   }
 };
 
