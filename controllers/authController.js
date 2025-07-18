@@ -4,6 +4,64 @@ const jwt = require('jsonwebtoken');
 const { User, PasswordResetRequest } = require('../models');
 // const { sendResetPasswordEmail } = require('../utils/email');
 
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      unit_kerja_id: user.unit_kerja_id,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+};
+
+exports.register = async (req, res) => {
+  try {
+    const { email, password, full_name, unit_kerja_id, role } = req.body;
+
+    // Validasi role
+    const allowedRoles = ['management', 'viewer', 'pdo'];
+    if (role && !allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role for self-registration' });
+    }
+
+    // Cek apakah email sudah terdaftar
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Hash password
+    const hashedPassword = await argon2.hash(password);
+
+    // Buat user baru dengan status verifikasi null (menunggu verifikasi admin)
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      full_name,
+      unit_kerja_id,
+      role: role || 'viewer',
+      is_verified: null,
+    });
+
+    res.status(201).json({
+      message: 'Registration successful. Please wait for admin verification.',
+      user: {
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+        unit_kerja_id: user.unit_kerja_id,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+};
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
