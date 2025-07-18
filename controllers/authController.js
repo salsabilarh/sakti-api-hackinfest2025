@@ -4,67 +4,14 @@ const jwt = require('jsonwebtoken');
 const { User, PasswordResetRequest } = require('../models');
 // const { sendResetPasswordEmail } = require('../utils/email');
 
-const generateToken = (user) => {
-  return jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      unit_kerja_id: user.unit_kerja_id,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' }
-  );
-};
-
-exports.register = async (req, res) => {
-  try {
-    const { email, password, full_name, unit_kerja_id, role } = req.body;
-
-    // Validasi role
-    const allowedRoles = ['management', 'viewer', 'pdo'];
-    if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({ error: 'Invalid role for self-registration' });
-    }
-
-    // Cek apakah email sudah terdaftar
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-    // Hash password
-    const hashedPassword = await argon2.hash(password);
-
-    // Buat user baru dengan status verifikasi null (menunggu verifikasi admin)
-    const user = await User.create({
-      email,
-      password: hashedPassword,
-      full_name,
-      unit_kerja_id,
-      role: role || 'viewer',
-      is_verified: null,
-    });
-
-    res.status(201).json({
-      message: 'Registration successful. Please wait for admin verification.',
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        unit_kerja_id: user.unit_kerja_id,
-      },
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
-};
-
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    // Validasi input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
 
     // Cari user berdasarkan email
     const user = await User.findOne({
@@ -73,45 +20,46 @@ exports.login = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    // Validasi apakah password ada dan string
+    if (!user.password || typeof user.password !== 'string') {
+      return res.status(401).json({ error: 'Invalid credentials. Password missing or corrupted.' });
     }
 
     // Verifikasi password
     const isPasswordValid = await argon2.verify(user.password, password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
 
-    // Cek apakah user sudah diverifikasi
-    if (user.is_verified !== true) {
-      return res.status(403).json({ error: 'Account not verified by admin' });
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     // Cek apakah user aktif
     if (!user.is_active) {
-      return res.status(403).json({ error: 'Account is inactive' });
+      return res.status(403).json({ error: 'Account is inactive.' });
     }
 
-    // Update last login
-    await user.update({ last_login: new Date() });
+    // Buat token JWT
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '1d',
+    });
 
-    // Generate token
-    const token = generateToken(user);
-
+    // Kirim response
     res.json({
       message: 'Login successful',
       token,
       user: {
         id: user.id,
+        name: user.name,
         email: user.email,
-        full_name: user.full_name,
         role: user.role,
-        unit_kerja: user.unit ? user.unit.name : null,
+        unit: user.unit ? user.unit.name : null,
       },
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed due to server error.' });
   }
 };
 
