@@ -21,11 +21,11 @@ module.exports = {
         },
       },
       password: {
-        type: Sequelize.STRING(255),
+        type: Sequelize.TEXT,
         allowNull: false,
       },
       role: {
-        type: Sequelize.STRING(10),
+        type: Sequelize.STRING(15),
         defaultValue: 'viewer',
         allowNull: false,
       },

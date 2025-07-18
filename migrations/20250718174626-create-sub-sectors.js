@@ -1,8 +1,9 @@
+// migrations/create-sub-sector.js
 'use strict';
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('portfolios', {
+    await queryInterface.createTable('sub_sectors', {
       id: {
         type: Sequelize.UUID,
         primaryKey: true,
@@ -18,6 +19,16 @@ module.exports = {
         allowNull: false,
         unique: true,
       },
+      sector_id: {
+        type: Sequelize.UUID,
+        allowNull: false,
+        references: {
+          model: 'sectors',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -30,10 +41,11 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('portfolios', ['code']);
+    await queryInterface.addIndex('sub_sectors', ['sector_id']);
+    await queryInterface.addIndex('sub_sectors', ['code']);
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('portfolios');
+    await queryInterface.dropTable('sub_sectors');
   }
 };

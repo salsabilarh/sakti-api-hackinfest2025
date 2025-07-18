@@ -15,7 +15,7 @@ sequelize.authenticate()
   .catch(err => console.error('Database connection error:', err));
 
 const app = express();
-app.set('trust proxy', true);
+// app.set('trust proxy', true);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -39,6 +39,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/adminRoutes'));
 app.use('/api/units', require('./routes/unitRoutes'));
 app.use('/api/portfolios', require('./routes/portfolioRoutes'));
+app.use('/api/sectors', require('./routes/sectorRoutes'));
 app.use('/api/services', require('./routes/serviceRoutes'));
 app.use('/api/marketing-kits', require('./routes/marketingKitRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));

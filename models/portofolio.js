@@ -6,15 +6,10 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
     },
     name: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING(50),
       allowNull: false,
       unique: true,
-    },
-    code: {
-      type: DataTypes.STRING(20),
-      allowNull: false,
-      unique: true,
-    },
+    }
   }, {
     tableName: 'portfolios',
     timestamps: true,

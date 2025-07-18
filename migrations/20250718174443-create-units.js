@@ -10,12 +10,7 @@ module.exports = {
         defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING(100),
-        allowNull: false,
-        unique: true,
-      },
-      code: {
-        type: Sequelize.STRING(20),
+        type: Sequelize.STRING(30),
         allowNull: false,
         unique: true,
       },
@@ -35,7 +30,6 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('units', ['code']);
     await queryInterface.addIndex('units', ['type']);
   },
 

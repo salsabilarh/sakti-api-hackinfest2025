@@ -18,11 +18,11 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     password: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.TEXT,
       allowNull: false,
     },
     role: {
-      type: DataTypes.STRING(10),
+      type: DataTypes.STRING(15),
       defaultValue: 'viewer',
       allowNull: false,
     },
