@@ -29,8 +29,6 @@ module.exports = {
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
       },
     });
-
-    await queryInterface.addIndex('sectors', ['code']);
   },
 
   down: async (queryInterface, Sequelize) => {

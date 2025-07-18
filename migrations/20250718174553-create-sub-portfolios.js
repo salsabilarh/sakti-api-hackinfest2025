@@ -1,4 +1,3 @@
-// migrations/create-sub-portfolio.js
 'use strict';
 
 module.exports = {
@@ -40,9 +39,6 @@ module.exports = {
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
       },
     });
-
-    await queryInterface.addIndex('sub_portfolios', ['portfolio_id']);
-    await queryInterface.addIndex('sub_portfolios', ['code']);
   },
 
   down: async (queryInterface, Sequelize) => {

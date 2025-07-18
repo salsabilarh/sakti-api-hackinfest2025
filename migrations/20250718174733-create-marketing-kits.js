@@ -1,4 +1,3 @@
-// migrations/create-marketing-kit.js
 'use strict';
 
 module.exports = {
@@ -53,9 +52,9 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('marketing_kits', ['service_id']);
-    await queryInterface.addIndex('marketing_kits', ['uploaded_by']);
-    await queryInterface.addIndex('marketing_kits', ['file_type']);
+    await queryInterface.addIndex('marketing_kits', ['file_type'], {
+      name: 'idx_marketing_kits_file_type',
+    });
   },
 
   down: async (queryInterface, Sequelize) => {

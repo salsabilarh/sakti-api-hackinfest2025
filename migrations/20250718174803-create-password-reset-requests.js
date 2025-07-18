@@ -43,8 +43,9 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex('password_reset_requests', ['user_id']);
-    await queryInterface.addIndex('password_reset_requests', ['is_processed']);
+    await queryInterface.addIndex('password_reset_requests', ['is_processed'], {
+      name: 'idx_is_processed',
+    });
   },
 
   down: async (queryInterface, Sequelize) => {

@@ -38,9 +38,6 @@ module.exports = {
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
       },
     });
-
-    await queryInterface.addIndex('download_logs', ['marketing_kit_id']);
-    await queryInterface.addIndex('download_logs', ['user_id']);
   },
 
   down: async (queryInterface, Sequelize) => {
