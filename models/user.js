@@ -1,81 +1,36 @@
+// models/user.js
+const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  const User = sequelize.define('User', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
-    },
-    name: {
-      type: DataTypes.STRING(100),
-      allowNull: false
-    },
+  class User extends Model {
+    static associate(models) {
+      User.belongsTo(models.UnitKerja, { foreignKey: 'unit_kerja_id' });
+      User.belongsTo(models.Role, { foreignKey: 'role_id' });
+      User.hasMany(models.MarketingKit, { foreignKey: 'uploaded_by' });
+      User.hasMany(models.DownloadLog, { foreignKey: 'user_id' });
+      User.hasMany(models.PasswordResetRequest, { foreignKey: 'user_id' });
+      User.hasMany(models.PasswordResetRequest, { foreignKey: 'handled_by' });
+    }
+  }
+  User.init({
+    name: DataTypes.STRING,
     email: {
       type: DataTypes.STRING,
-      allowNull: false,
       unique: true,
       validate: {
         isEmail: true
       }
     },
-    password: {
-      type: DataTypes.TEXT,
-      allowNull: false
-    },
-    role: {
-      type: DataTypes.STRING(50),
-      allowNull: false
-    },
-    is_verified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: null
-    },
-    is_active: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    }
+    password: DataTypes.STRING,
+    unit_kerja_id: DataTypes.INTEGER,
+    role_id: DataTypes.INTEGER,
+    verified: DataTypes.BOOLEAN,
+    active: DataTypes.BOOLEAN,
+    last_login: DataTypes.DATE,
+    reset_password_token: DataTypes.STRING,
+    reset_password_expires: DataTypes.DATE
   }, {
-    tableName: 'users',
-    timestamps: false,
-    underscored: true,
-    defaultScope: {
-      attributes: { exclude: ['password'] }
-    },
-    scopes: {
-      withPassword: {
-        attributes: {}
-      }
-    }
+    sequelize,
+    modelName: 'User',
   });
-
-  User.associate = models => {
-    User.belongsTo(models.Unit, { 
-      foreignKey: 'unit_kerja_id',
-      as: 'unit_kerja'
-    });
-    User.hasMany(models.ServiceMarketingKit, {
-      foreignKey: 'uploaded_by'
-    });
-    User.hasMany(models.Deal, {
-      foreignKey: 'created_by'
-    });
-    User.hasMany(models.DealHistory, {
-      foreignKey: 'changed_by'
-    });
-    User.hasMany(models.Project, {
-      foreignKey: 'created_by'
-    });
-  };
-
   return User;
 };

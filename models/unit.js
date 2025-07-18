@@ -1,31 +1,18 @@
+// models/unitkerja.js
+const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  const Unit = sequelize.define('Unit', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
-    },
-    name: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      unique: true
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+  class UnitKerja extends Model {
+    static associate(models) {
+      UnitKerja.hasMany(models.User, { foreignKey: 'unit_kerja_id' });
+      UnitKerja.hasMany(models.Jasa, { foreignKey: 'sbu_owner_id' });
     }
+  }
+  UnitKerja.init({
+    name: DataTypes.STRING,
+    code: DataTypes.STRING
   }, {
-    tableName: 'units',
-    timestamps: false,
-    underscored: true
+    sequelize,
+    modelName: 'UnitKerja',
   });
-
-  Unit.associate = models => {
-    Unit.hasMany(models.User, { foreignKey: 'unit_kerja_id' });
-    Unit.hasMany(models.Deal, { foreignKey: 'unit_kerja_id' });
-    Unit.hasMany(models.Project, { foreignKey: 'unit_kerja_id' });
-  };
-
-  return Unit;
+  return UnitKerja;
 };

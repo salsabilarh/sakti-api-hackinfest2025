@@ -1,296 +1,235 @@
-const { User, Unit } = require('../models');
+// controllers/authController.js
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
+const { User, PasswordResetRequest } = require('../models');
+const { sendResetPasswordEmail } = require('../services/emailService');
+const config = require('../config/config');
 
-// Helper function
-const generateToken = (userId, role) => {
-  return jwt.sign(
-    { id: userId, role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN }
-  );
-};
-
-module.exports = {
-  register: async (req, res) => {
-    try {
-      const { name, email, password, unit_kerja_id, role } = req.body;
-
-      // Validation
-      if (!name || !email || !password || !role) {
-        return res.status(400).json({ 
-          success: false,
-          message: 'Name, email, password, and role are required' 
-        });
-      }
-
-      // Prevent self-registration as admin
-      if (role === 'Admin') {
-        return res.status(403).json({ 
-          success: false,
-          message: 'Admin registration is not allowed' 
-        });
-      }
-
-      // Check if user already exists
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
-        return res.status(400).json({ 
-          success: false,
-          message: 'Email already registered' 
-        });
-      }
-
-      // Validate unit if provided
-      if (unit_kerja_id) {
-        const unitExists = await Unit.findByPk(unit_kerja_id);
-        if (!unitExists) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid unit specified'
-          });
-        }
-      }
-
-      // Hash password
-      const hashedPassword = await argon2.hash(password);
-
-      // Create unverified user
-      const newUser = await User.create({
-        name,
-        email,
-        password: hashedPassword,
-        unit_kerja_id: unit_kerja_id || null,
-        role,
-        is_verified: null, // Explicitly set to null
-        is_active: true
-      });
-
-      // Prepare response
-      const userData = {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        unit_kerja_id: newUser.unit_kerja_id,
-        is_verified: newUser.is_verified,
-        is_active: newUser.is_active,
-        created_at: newUser.created_at
-      };
-
-      res.status(201).json({
-        success: true,
-        message: 'Registration successful. Please wait for admin verification.',
-        data: userData
-      });
-
-    } catch (error) {
-      console.error('Registration error:', error);
-      res.status(500).json({ 
-        success: false,
-        message: 'Registration failed',
-        error: process.env.NODE_ENV === 'development' ? error.message : null
-      });
+// Register new user
+exports.register = async (req, res) => {
+  try {
+    const { name, email, password, unit_kerja_id, role_id } = req.body;
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
     }
-  },
-  
-  login: async (req, res) => {
-    try {
-      const { email, password } = req.body;
-
-      // Validation
-      if (!email || !password) {
-        return res.status(400).json({ 
-          success: false,
-          message: 'Email and password are required' 
-        });
-      }
-
-      // Find user with unit info
-      const user = await User.scope('withPassword').findOne({
-        where: { email },
-        include: [{
-          model: Unit,
-          as: 'unit_kerja',
-          attributes: ['id', 'name']
-        }]
-      });
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      // Check verification status (must be true)
-      if (user.is_verified !== true) {
-        return res.status(403).json({
-          success: false,
-          message: 'Account not verified by admin yet'
-        });
-      }
-
-      // Verify password
-      const validPassword = await argon2.verify(user.password, password);
-      if (!validPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      // Check if account is active
-      if (!user.is_active) {
-        return res.status(403).json({
-          success: false,
-          message: 'Account is deactivated'
-        });
-      }
-
-      // Generate JWT token
-      const token = generateToken(user.id, user.role);
-
-      // Prepare response data
-      const userData = {
+    
+    // Hash password
+    const hashedPassword = await argon2.hash(password);
+    
+    // Create user with verified: null (waiting for admin approval)
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      unit_kerja_id,
+      role_id,
+      verified: null
+    });
+    
+    res.status(201).json({ 
+      message: 'User registered successfully. Waiting for admin approval.',
+      user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        unit_kerja: user.unit_kerja ? {
-          id: user.unit_kerja.id,
-          name: user.unit_kerja.name
-        } : null,
-        is_verified: user.is_verified,
-        is_active: user.is_active
-      };
+        unit_kerja_id: user.unit_kerja_id,
+        role_id: user.role_id
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-      res.json({
-        success: true,
-        message: 'Login successful',
-        data: userData,
-        token
-      });
-
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Login failed',
-        error: process.env.NODE_ENV === 'development' ? error.message : null
-      });
+// Login user
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Find user by email
+    const user = await User.findOne({ 
+      where: { email },
+      include: ['UnitKerja', 'Role']
+    });
+    
+    // Check if user exists and is verified
+    if (!user || user.verified !== true) {
+      return res.status(401).json({ message: 'Invalid credentials or account not approved' });
     }
-  },
+    
+    // Verify password
+    const isPasswordValid = await argon2.verify(user.password, password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    // Update last login
+    await user.update({ last_login: new Date() });
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email,
+        role: user.Role.name,
+        unit_kerja: user.UnitKerja.name
+      },
+      config.jwtSecret,
+      { expiresIn: '8h' }
+    );
+    
+    res.json({ 
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.Role.name,
+        unit_kerja: user.UnitKerja.name
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-  // Get current user profile
-  getMe: async (req, res) => {
-    try {
-      const user = await User.findByPk(req.user.id, {
-        attributes: { exclude: ['password', 'unit_kerja_id'] },
-        include: [{
-          model: Unit,
-          as: 'unit_kerja',
+// Forgot password - request reset
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Create password reset request
+    const resetRequest = await PasswordResetRequest.create({
+      user_id: user.id,
+      status: 'pending'
+    });
+    
+    // In a real application, you would send an email to admin here
+    // For this example, we'll just return the request ID
+    res.json({ 
+      message: 'Password reset request submitted. Admin will contact you shortly.',
+      request_id: resetRequest.id
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Reset password (admin action)
+exports.resetPassword = async (req, res) => {
+  try {
+    const { request_id } = req.params;
+    const { admin_id } = req.user; // Assuming admin is logged in
+    
+    // Find the reset request
+    const resetRequest = await PasswordResetRequest.findOne({
+      where: { id: request_id, status: 'pending' },
+      include: ['User']
+    });
+    
+    if (!resetRequest) {
+      return res.status(404).json({ message: 'Request not found or already handled' });
+    }
+    
+    // Generate a default password
+    const defaultPassword = 'Password123!'; // In production, generate a random strong password
+    
+    // Hash the new password
+    const hashedPassword = await argon2.hash(defaultPassword);
+    
+    // Update user's password
+    await resetRequest.User.update({ 
+      password: hashedPassword,
+      reset_password_token: null,
+      reset_password_expires: null
+    });
+    
+    // Update the reset request
+    await resetRequest.update({
+      handled_by: admin_id,
+      handled_at: new Date(),
+      status: 'completed'
+    });
+    
+    // Send email to user with new password
+    await sendResetPasswordEmail(resetRequest.User.email, defaultPassword);
+    
+    res.json({ message: 'Password reset successfully. User has been notified via email.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Change password (user action)
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    
+    // Find user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Verify current password
+    const isPasswordValid = await argon2.verify(user.password, currentPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+    
+    // Hash new password
+    const hashedPassword = await argon2.hash(newPassword);
+    
+    // Update password
+    await user.update({ password: hashedPassword });
+    
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Get user profile
+exports.getProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'name', 'email', 'last_login'],
+      include: [
+        {
+          association: 'UnitKerja',
           attributes: ['name']
-        }]
-      });
-
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      // Transformasi: ubah object unit_kerja menjadi string nama
-      const response = {
-        ...user.get({ plain: true }), // Konversi ke plain object
-        unit_kerja: user.unit_kerja ? user.unit_kerja.name : null // Ambil hanya nama
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error('Get profile error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+        },
+        {
+          association: 'Role',
+          attributes: ['name']
+        }
+      ]
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  },
-
-  updatePassword: async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      
-      // Validasi input lebih ketat
-      if (!currentPassword || typeof currentPassword !== 'string' || currentPassword.trim() === '') {
-        return res.status(400).json({ message: 'Current password is required and must be a non-empty string' });
-      }
-      
-      if (!newPassword || typeof newPassword !== 'string' || newPassword.trim() === '') {
-        return res.status(400).json({ message: 'New password is required and must be a non-empty string' });
-      }
-
-      const user = await User.findByPk(req.user.id, {
-        attributes: ['id', 'password'] // Hanya ambil field yang diperlukan
-      });
-
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      // Pastikan user memiliki password yang valid di database
-      if (!user.password || typeof user.password !== 'string' || user.password.trim() === '') {
-        console.error('Invalid password hash in database for user:', user.id);
-        return res.status(500).json({ message: 'Invalid password configuration' });
-      }
-
-      // Verifikasi password lama
-      let isMatch;
-      try {
-        isMatch = await argon2.verify(user.password, currentPassword);
-      } catch (verifyError) {
-        console.error('Password verification failed:', {
-          userId: user.id,
-          error: verifyError,
-          hashType: typeof user.password,
-          hashLength: user.password.length
-        });
-        return res.status(500).json({ message: 'Password verification failed' });
-      }
-
-      if (!isMatch) {
-        return res.status(401).json({ message: 'Current password is incorrect' });
-      }
-
-      // Hash password baru
-      let hashedPassword;
-      try {
-        hashedPassword = await argon2.hash(newPassword, {
-          type: argon2.argon2id,
-          memoryCost: 19456,
-          timeCost: 2,
-          parallelism: 1
-        });
-      } catch (hashError) {
-        console.error('Password hashing failed:', hashError);
-        return res.status(500).json({ message: 'Failed to hash new password' });
-      }
-
-      // Update password
-      try {
-        await user.update({ password: hashedPassword });
-        return res.json({ 
-          success: true,
-          message: 'Password updated successfully'
-        });
-      } catch (updateError) {
-        console.error('Password update failed:', updateError);
-        return res.status(500).json({ message: 'Failed to update password' });
-      }
-
-    } catch (error) {
-      console.error('Update password controller error:', error);
-      return res.status(500).json({ 
-        message: 'Internal server error',
-        ...(process.env.NODE_ENV === 'development' && { 
-          error: error.message,
-          stack: error.stack 
-        })
-      });
-    }
+    
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

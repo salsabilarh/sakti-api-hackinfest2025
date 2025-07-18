@@ -1,48 +1,18 @@
+// models/sektor.js
+const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  const Sector = sequelize.define('Sector', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
-    },
-    code: {
-      type: DataTypes.STRING(10),
-      allowNull: false,
-      unique: true
-    },
-    name: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      unique: true
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+  class Sektor extends Model {
+    static associate(models) {
+      Sektor.hasMany(models.SubSektor, { foreignKey: 'sektor_id' });
+      Sektor.belongsToMany(models.Jasa, { through: 'JasaSektors', foreignKey: 'sektor_id' });
     }
+  }
+  Sektor.init({
+    name: DataTypes.STRING,
+    code: DataTypes.STRING
   }, {
-    tableName: 'sectors',
-    timestamps: false,
-    underscored: true
+    sequelize,
+    modelName: 'Sektor',
   });
-
-  Sector.associate = models => {
-    Sector.hasMany(models.SubSector, {
-      foreignKey: 'sector_id',
-      as: 'sub_sectors'
-    });
-    Sector.belongsToMany(models.Service, {
-      through: models.ServiceSectorMap,
-      foreignKey: 'sector_id',
-      as: 'services'
-    });
-    Sector.hasMany(models.Deal, {
-      foreignKey: 'sector_id'
-    });
-    Sector.hasMany(models.Project, {
-      foreignKey: 'sector_id'
-    });
-  };
-
-  return Sector;
+  return Sektor;
 };

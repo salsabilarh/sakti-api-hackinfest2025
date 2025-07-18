@@ -5,6 +5,7 @@ const portfolioController = require('../controllers/portofolioController');
 const subPortfolioController = require('../controllers/subPortfolioController');
 const sectorController = require('../controllers/sectorController');
 const subSectorController = require('../controllers/subSectorController');
+const marketingKitController = require('../controllers/marketingKitController');
 const authMiddleware = require('../middlewares/authMiddleware');
 const multer = require('multer');
 const path = require('path');
@@ -56,20 +57,37 @@ router.delete('/sub-portfolios/:id', subPortfolioController.deleteSubPortfolio);
 //   serviceController.addServiceSector
 // );
 
-// Marketing kit routes
-router.get('/:id/marketing-kits', serviceController.getMarketingKitsByService);
-router.post('/:serviceId/marketing-kits', 
-  authMiddleware.authorize('Admin', 'Staf_SBU', 'Manajemen_SBU'),  
-  upload.single('file'),
-  serviceController.uploadMarketingKit
-);
-router.delete('/marketing-kits/:id', serviceController.deleteMarketingKit);
-
 // Service routes
 router.get('/', serviceController.getAllServices);
 router.get('/:id', serviceController.getServiceDetails);
-router.post('/', serviceController.createService);
-router.put('/:id', serviceController.updateService);
-router.delete('/:id', serviceController.deleteService);
+
+// Marketing kit routes
+router.get('/marketing-kits', marketingKitController.getAllMarketingKits);
+
+// Role-based routes
+router.post('/services', authorize(['admin', 'management']), serviceController.createService);
+router.put('/services/:id', authorize(['admin', 'management']), serviceController.updateService);
+router.delete('/services/:id', authorize(['admin', 'management']), serviceController.deleteService);
+
+router.post('/marketing-kits', 
+  authorize(['admin', 'management']), 
+  upload.single('file'), 
+  marketingKitController.uploadMarketingKit
+);
+
+router.post('/marketing-kits/:id/download', 
+  authorize(['admin', 'management', 'branch_management']), 
+  marketingKitController.downloadMarketingKit
+);
+
+router.put('/marketing-kits/:id', 
+  authorize(['admin', 'management']), 
+  marketingKitController.updateMarketingKit
+);
+
+router.delete('/marketing-kits/:id', 
+  authorize(['admin', 'management']), 
+  marketingKitController.deleteMarketingKit
+);
 
 module.exports = router;

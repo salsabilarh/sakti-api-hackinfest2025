@@ -1,31 +1,17 @@
+// models/portfolio.js
+const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  const Portofolio = sequelize.define('Portofolio', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
-    },
-    name: {
-      type: DataTypes.STRING(50),
-      allowNull: false,
-      unique: true
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+  class Portfolio extends Model {
+    static associate(models) {
+      Portfolio.hasMany(models.SubPortfolio, { foreignKey: 'portfolio_id' });
     }
+  }
+  Portfolio.init({
+    name: DataTypes.STRING,
+    code: DataTypes.STRING
   }, {
-    tableName: 'portofolios',
-    timestamps: false,
-    underscored: true
+    sequelize,
+    modelName: 'Portfolio',
   });
-
-  Portofolio.associate = models => {
-    Portofolio.hasMany(models.SubPortofolio, {
-      foreignKey: 'portofolio_id'
-    });
-  };
-
-  return Portofolio;
+  return Portfolio;
 };

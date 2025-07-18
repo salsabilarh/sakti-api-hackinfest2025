@@ -1,97 +1,30 @@
+// models/jasa.js
+const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  const Service = sequelize.define('Service', {
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
-    },
-    code: {
-      type: DataTypes.STRING(10),
-      allowNull: false,
-      unique: true
-    },
-    name: {
-      type: DataTypes.STRING(300),
-      allowNull: false,
-      unique: true
-    },
-    service_group: {
-      type: DataTypes.STRING(20),
-      allowNull: true
-    },
-    intro_video_url: {
-      type: DataTypes.STRING(500),
-      allowNull: true,
-      validate: {
-        isUrl: {
-          msg: 'Harus berupa URL video yang valid'
-        }
-      }
-    },
-    description_service: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    benefit: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    scope: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    output: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    regulation_ref: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    sbu_owner: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+  class Jasa extends Model {
+    static associate(models) {
+      Jasa.belongsTo(models.SubPortfolio, { foreignKey: 'sub_portfolio_id' });
+      Jasa.belongsTo(models.UnitKerja, { foreignKey: 'sbu_owner_id' });
+      Jasa.belongsToMany(models.Sektor, { through: 'JasaSektors', foreignKey: 'jasa_id' });
+      Jasa.belongsToMany(models.SubSektor, { through: 'JasaSektors', foreignKey: 'jasa_id' });
+      Jasa.hasMany(models.MarketingKit, { foreignKey: 'jasa_id' });
     }
+  }
+  Jasa.init({
+    name: DataTypes.STRING,
+    code: DataTypes.STRING,
+    kelompok_jasa: DataTypes.STRING,
+    overview: DataTypes.TEXT,
+    url_intro_video: DataTypes.STRING,
+    ruang_lingkup: DataTypes.TEXT,
+    manfaat: DataTypes.TEXT,
+    output: DataTypes.TEXT,
+    regulation_ref: DataTypes.TEXT,
+    sbu_owner_id: DataTypes.INTEGER,
+    sub_portfolio_id: DataTypes.INTEGER
   }, {
-    tableName: 'services',
-    timestamps: false,
-    underscored: true
+    sequelize,
+    modelName: 'Jasa',
   });
-
-  Service.associate = models => {
-    Service.belongsTo(models.SubPortofolio, {
-      foreignKey: 'sub_portofolio_id',
-      as: 'sub_portofolio'
-    });
-    Service.belongsToMany(models.Sector, {
-      through: models.ServiceSectorMap,
-      foreignKey: 'service_id',
-      as: 'sectors',
-      include: [{
-        model: models.SubSector,
-        as: 'sub_sectors'
-      }]
-    });
-    Service.hasMany(models.ServiceMarketingKit, {
-      foreignKey: 'service_id'
-    });
-    Service.hasMany(models.Deal, {
-      foreignKey: 'service_id'
-    });
-    Service.hasMany(models.Project, {
-      foreignKey: 'service_id'
-    });
-  };
-
-  return Service;
+  return Jasa;
 };

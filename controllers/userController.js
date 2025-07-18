@@ -1,212 +1,220 @@
-const { User, Unit } = require('../models');
-const argon2 = require('argon2');
+// controllers/userController.js
+const { User, UnitKerja, Role, PasswordResetRequest } = require('../models');
 
-module.exports = {
-  // Get all users (Admin only)
-  getAllUsers: async (req, res) => {
-    try {
-      const { is_verified } = req.query;
-      
-      // Siapkan kondisi where (kosong = tampilkan semua)
-      const whereCondition = {};
+// Get all users (admin only)
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { unit_kerja, role, status, verified, search, sort } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    if (unit_kerja) filter.unit_kerja_id = unit_kerja;
+    if (role) filter.role_id = role;
+    if (status) filter.active = status === 'active';
+    if (verified) filter.verified = verified === 'true';
+    
+    // Build search condition
+    const searchCondition = search ? {
+      [Op.or]: [
+        { name: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } }
+      ]
+    } : {};
+    
+    // Build sort order
+    const order = [];
+    if (sort === 'name_asc') order.push(['name', 'ASC']);
+    if (sort === 'name_desc') order.push(['name', 'DESC']);
+    
+    const users = await User.findAll({
+      where: { ...filter, ...searchCondition },
+      include: [
+        { model: UnitKerja, attributes: ['name'] },
+        { model: Role, attributes: ['name'] }
+      ],
+      order,
+      attributes: ['id', 'name', 'email', 'active', 'verified', 'last_login']
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-      // Filter jika is_verified disediakan di query
-      if (is_verified !== undefined) {
-        if (is_verified === 'true') {
-          whereCondition.is_verified = true;
-        } else if (is_verified === 'false') {
-          whereCondition.is_verified = false;
+// Get waiting users (admin only)
+exports.getWaitingUsers = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      where: { verified: null },
+      include: [
+        { model: UnitKerja, attributes: ['name'] },
+        { model: Role, attributes: ['name'] }
+      ],
+      attributes: ['id', 'name', 'email']
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Approve user (admin only)
+exports.approveUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    await user.update({ verified: true });
+    
+    res.json({ message: 'User approved successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Reject user (admin only)
+exports.rejectUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    await user.destroy();
+    
+    res.json({ message: 'User rejected and deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Get password reset requests (admin only)
+exports.getPasswordResetRequests = async (req, res) => {
+  try {
+    const requests = await PasswordResetRequest.findAll({
+      where: { status: 'pending' },
+      include: [
+        { 
+          model: User, 
+          as: 'User',
+          include: [
+            { model: UnitKerja, attributes: ['name'] },
+            { model: Role, attributes: ['name'] }
+          ],
+          attributes: ['id', 'name', 'email']
         }
-      }
+      ],
+      order: [['requested_at', 'ASC']]
+    });
+    
+    res.json(requests);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-      const users = await User.findAll({
-        where: whereCondition,
-        attributes: [ 
-          'id',
-          'name',
-          'email',
-          'role',
-          'is_verified',
-          'is_active',
-          'created_at',
-          'updated_at'
-        ],
-        include: [
-          { 
-            model: Unit, 
-            as: 'unit_kerja',
-            attributes: ['id', 'name'] // Only include necessary unit fields
-          }
-        ],
-        order: [['created_at', 'DESC']] // Sort by creation date
-      });
-      
-      res.json({
-        success: true,
-        message: 'Verified users retrieved successfully',
-        data: users,
-        count: users.length
-      });
-    } catch (error) {
-      console.error('Get users error:', error);
-      res.status(500).json({ 
-        success: false,
-        message: 'Failed to retrieve users',
-        error: process.env.NODE_ENV === 'development' ? error.message : null
-      });
+// Create user (admin only)
+exports.createUser = async (req, res) => {
+  try {
+    const { name, email, password, unit_kerja_id, role_id } = req.body;
+    
+    // Check if email exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
     }
-  },
-
-  // Create new user (Admin only)
-  createUser: async (req, res) => {
-    try {
-      const { name, email, password, unit_kerja_id, role } = req.body;
-
-      // Validation
-      if (!name || !email || !password || !role) {
-        return res.status(400).json({ message: 'Name, email, password, and role are required' });
+    
+    // Hash password
+    const hashedPassword = await argon2.hash(password);
+    
+    // Create user (automatically verified since admin is creating)
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      unit_kerja_id,
+      role_id,
+      verified: true
+    });
+    
+    res.status(201).json({ 
+      message: 'User created successfully',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        unit_kerja_id: user.unit_kerja_id,
+        role_id: user.role_id
       }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-      // Validate role assignment
-      if (role === 'Admin' && req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Only Admin can create Admin users' });
-      }
-
-      // Check if user already exists
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
-        return res.status(400).json({ message: 'Email already registered' });
-      }
-
-      // If unit_kerja_id provided, validate unit
-      if (unit_kerja_id) {
-        const unit = await Unit.findByPk(unit_kerja_id);
-        if (!unit) {
-          return res.status(400).json({ message: 'Invalid unit' });
-        }
-      }
-
-      // Hash password
-      const hashedPassword = await argon2.hash(password);
-
-      // Create user (automatically verified since admin is creating)
-      const newUser = await User.create({
-        name,
-        email,
-        password: hashedPassword,
-        unit_kerja_id: unit_kerja_id || null,
-        role,
-        is_verified: true, // Always true when created by admin
-        is_active: true,
-        verified_by: req.user.id // Track which admin verified/created
-      });
-
-      // Return response without password
-      const userResponse = {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        unit_kerja_id: newUser.unit_kerja_id,
-        is_verified: newUser.is_verified,
-        is_active: newUser.is_active,
-        created_at: newUser.created_at,
-        verified_by: newUser.verified_by
-      };
-
-      res.status(201).json({
-        message: 'User created and verified successfully',
-        user: userResponse
-      });
-
-    } catch (error) {
-      console.error('Create user error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+// Update user (admin only)
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, unit_kerja_id, role_id, active } = req.body;
+    
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  },
-
-  // Update user (Admin only)
-  updateUser: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { name, email, unit_kerja_id, role, is_active } = req.body;
-
-      const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+    
+    // Check if email is being changed and if new email exists
+    if (email && email !== user.email) {
+      const emailExists = await User.findOne({ where: { email } });
+      if (emailExists) {
+        return res.status(400).json({ message: 'Email already in use' });
       }
-
-      // Prevent non-admins from modifying admins
-      if (user.role === 'Admin' && req.user.role !== 'Admin') {
-        return res.status(403).json({ message: 'Only Admin can modify other Admins' });
-      }
-
-      // Update fields
-      user.name = name || user.name;
-      user.email = email || user.email;
-      user.unit_kerja_id = unit_kerja_id || user.unit_kerja_id;
-      user.role = role || user.role;
-      user.is_active = is_active !== undefined ? is_active : user.is_active;
-
-      await user.save();
-
-      // Return without password
-      const userResponse = user.toJSON();
-      delete userResponse.password;
-
-      res.json({
-        message: 'User updated successfully',
-        user: userResponse
-      });
-    } catch (error) {
-      console.error('Update user error:', error);
-      res.status(500).json({ message: 'Internal server error' });
     }
-  },
+    
+    await user.update({
+      name: name || user.name,
+      email: email || user.email,
+      unit_kerja_id: unit_kerja_id || user.unit_kerja_id,
+      role_id: role_id || user.role_id,
+      active: active !== undefined ? active : user.active
+    });
+    
+    res.json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
-  // Reset password (Admin only)
-  resetPassword: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { newPassword } = req.body;
-
-      const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      const hashedPassword = await argon2.hash(newPassword);
-      user.password = hashedPassword;
-      await user.save();
-
-      res.json({ message: 'Password reset successfully' });
-    } catch (error) {
-      console.error('Reset password error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+// Delete user (admin only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  },
-
-  // Delete user (Admin only)
-  deleteUser: async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      // Prevent deleting admin users
-      if (user.role === 'Admin') {
-        return res.status(403).json({ message: 'Cannot delete Admin users' });
-      }
-
-      await user.destroy();
-
-      res.json({ message: 'User deleted successfully' });
-    } catch (error) {
-      console.error('Delete user error:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    
+    await user.destroy();
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

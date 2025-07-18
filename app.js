@@ -1,55 +1,47 @@
-require('dotenv').config({ debug: true });
+// app.js
 const express = require('express');
-const path = require('path');
-const cookieParser = require('cookie-parser');
-const logger = require('morgan');
-const cors = require('cors'); // Add CORS support
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const { Sequelize } = require('sequelize');
+const config = require('./config/config');
 
-// Database connection
-const { sequelize } = require('./models');
-sequelize.authenticate()
-  .then(() => console.log('Database connected successfully'))
-  .catch(err => console.error('Database connection error:', err));
-
-// (async () => {
-//   try {
-//     const { sequelize } = require('./models');
-//     const seeder = require('./seeders/initialAdmin');
-    
-//     await sequelize.sync();
-//     await seeder.up(sequelize.getQueryInterface(), sequelize.Sequelize);
-    
-//     console.log('Database & seeders initialized');
-//   } catch (error) {
-//     console.error('Seeder error:', error);
-//   }
-// })();
-
+// Initialize Express app
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(logger('dev'));
+app.use(helmet());
+app.use(morgan('dev'));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
+
+// Database connection
+const sequelize = new Sequelize(config.db);
+
+// Test database connection
+sequelize.authenticate()
+  .then(() => console.log('Database connected'))
+  .catch(err => console.error('Database connection error:', err));
+
+// Sync models
+sequelize.sync({ alter: true })
+  .then(() => console.log('Database synced'))
+  .catch(err => console.error('Database sync error:', err));
 
 // Routes
-app.use('/', require('./routes/index'));
-app.use('/api/units', require('./routes/unitRoutes'));
-app.use('/api/admin', require('./routes/adminRoutes'));
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/services', require('./routes/serviceRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/deals', require('./routes/dealRoutes'));
-app.use('/api/projects', require('./routes/projectRoutes'));
-app.use('/api/dashboard', require('./routes/analyticRoutes'));
+app.use('/api', require('./routes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+  res.status(500).json({ message: 'Something broke!' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
