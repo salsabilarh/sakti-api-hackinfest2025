@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node ./bin/www",
     "dev": "nodemon ./bin/www",
-    "seed": "node ./scripts/run-seeders.js",
+    "seed": "sequelize db:seed:all",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
