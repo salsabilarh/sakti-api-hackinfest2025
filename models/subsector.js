@@ -1,19 +1,31 @@
-// models/subsektor.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class SubSektor extends Model {
-    static associate(models) {
-      SubSektor.belongsTo(models.Sektor, { foreignKey: 'sektor_id' });
-      SubSektor.belongsToMany(models.Jasa, { through: 'JasaSektors', foreignKey: 'sub_sektor_id' });
-    }
-  }
-  SubSektor.init({
-    name: DataTypes.STRING,
-    code: DataTypes.STRING,
-    sektor_id: DataTypes.INTEGER
+  const SubSector = sequelize.define('SubSector', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    code: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      unique: true,
+    },
   }, {
-    sequelize,
-    modelName: 'SubSektor',
+    tableName: 'sub_sectors',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
   });
-  return SubSektor;
+
+  SubSector.associate = (models) => {
+    SubSector.belongsTo(models.Sector, { foreignKey: 'sector_id', as: 'sector' });
+    SubSector.belongsToMany(models.Service, { through: 'service_sub_sectors', as: 'services' });
+  };
+
+  return SubSector;
 };

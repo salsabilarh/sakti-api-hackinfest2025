@@ -1,43 +1,45 @@
-// migrations/create-unit-kerja.js
+// migrations/create-unit.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('UnitKerjas', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('units', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(100),
         allowNull: false,
-        unique: true
+        unique: true,
       },
       code: {
-        type: Sequelize.STRING,
-        unique: true
-      },
-      createdAt: {
+        type: Sequelize.STRING(20),
         allowNull: false,
-        type: Sequelize.DATE
+        unique: true,
       },
-      updatedAt: {
+      type: {
+        type: Sequelize.ENUM('sbu', 'ppk', 'cabang'),
         allowNull: false,
-        type: Sequelize.DATE
-      }
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+      },
+      updated_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+      },
     });
-    
-    // Insert default unit kerja
-    await queryInterface.bulkInsert('UnitKerjas', [
-      { name: 'SBU', code: 'SBU', createdAt: new Date(), updatedAt: new Date() },
-      { name: 'PPK', code: 'PPK', createdAt: new Date(), updatedAt: new Date() },
-      { name: 'Cabang Balikpapan', code: 'CBP', createdAt: new Date(), updatedAt: new Date() },
-      { name: 'Cabang Surabaya', code: 'SBY', createdAt: new Date(), updatedAt: new Date() }
-      // Tambahkan unit kerja lainnya sesuai kebutuhan
-    ]);
+
+    await queryInterface.addIndex('units', ['code']);
+    await queryInterface.addIndex('units', ['type']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('UnitKerjas');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('units');
   }
 };

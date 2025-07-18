@@ -1,46 +1,49 @@
-// migrations/create-download-log.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('DownloadLogs', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('download_logs', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
-      },
-      marketing_kit_id: {
-        type: Sequelize.INTEGER,
-        references: {
-          model: 'MarketingKits',
-          key: 'id'
-        }
-      },
-      user_id: {
-        type: Sequelize.INTEGER,
-        references: {
-          model: 'Users',
-          key: 'id'
-        }
+        defaultValue: Sequelize.UUIDV4,
       },
       purpose: {
-        type: Sequelize.TEXT
+        type: Sequelize.TEXT,
+        allowNull: false,
       },
-      downloaded_at: {
+      marketing_kit_id: {
+        type: Sequelize.UUID,
+        allowNull: false,
+        references: {
+          model: 'marketing_kits',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      user_id: {
+        type: Sequelize.UUID,
+        allowNull: false,
+        references: {
+          model: 'users',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
+      },
+      created_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
-      },
-      createdAt: {
         allowNull: false,
-        type: Sequelize.DATE
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
       },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE
-      }
     });
+
+    await queryInterface.addIndex('download_logs', ['marketing_kit_id']);
+    await queryInterface.addIndex('download_logs', ['user_id']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('DownloadLogs');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('download_logs');
   }
 };

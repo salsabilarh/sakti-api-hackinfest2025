@@ -1,50 +1,53 @@
-// migrations/create-password-reset-request.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('PasswordResetRequests', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('password_reset_requests', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        defaultValue: Sequelize.UUIDV4,
       },
       user_id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
+        allowNull: false,
         references: {
-          model: 'Users',
-          key: 'id'
-        }
+          model: 'users',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
       },
-      requested_at: {
+      is_processed: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
+      },
+      processed_by: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: 'users',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL',
+      },
+      processed_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
+        allowNull: true,
       },
-      handled_by: {
-        type: Sequelize.INTEGER,
-        references: {
-          model: 'Users',
-          key: 'id'
-        }
-      },
-      handled_at: {
-        type: Sequelize.DATE
-      },
-      status: {
-        type: Sequelize.ENUM('pending', 'completed'),
-        defaultValue: 'pending'
-      },
-      createdAt: {
+      created_at: {
+        type: Sequelize.DATE,
         allowNull: false,
-        type: Sequelize.DATE
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
       },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE
-      }
     });
+
+    await queryInterface.addIndex('password_reset_requests', ['user_id']);
+    await queryInterface.addIndex('password_reset_requests', ['is_processed']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('PasswordResetRequests');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('password_reset_requests');
   }
 };

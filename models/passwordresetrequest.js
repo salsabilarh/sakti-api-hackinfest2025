@@ -1,21 +1,30 @@
-// models/passwordresetrequest.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class PasswordResetRequest extends Model {
-    static associate(models) {
-      PasswordResetRequest.belongsTo(models.User, { foreignKey: 'user_id' });
-      PasswordResetRequest.belongsTo(models.User, { foreignKey: 'handled_by' });
-    }
-  }
-  PasswordResetRequest.init({
-    user_id: DataTypes.INTEGER,
-    requested_at: DataTypes.DATE,
-    handled_by: DataTypes.INTEGER,
-    handled_at: DataTypes.DATE,
-    status: DataTypes.ENUM('pending', 'completed')
+  const PasswordResetRequest = sequelize.define('PasswordResetRequest', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    is_processed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    processed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   }, {
-    sequelize,
-    modelName: 'PasswordResetRequest',
+    tableName: 'password_reset_requests',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: false,
   });
+
+  PasswordResetRequest.associate = (models) => {
+    PasswordResetRequest.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+    PasswordResetRequest.belongsTo(models.User, { foreignKey: 'processed_by', as: 'processor' });
+  };
+
   return PasswordResetRequest;
 };

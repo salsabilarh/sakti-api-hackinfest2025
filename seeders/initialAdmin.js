@@ -9,7 +9,7 @@ module.exports = {
     
     return queryInterface.bulkInsert('users', [{
       id: uuidv4(),
-      name: 'Administrator',
+      full_name: 'Administrator',
       email: 'admin@sucofindo.com',
       password: hashedPassword,
       role: 'Admin',

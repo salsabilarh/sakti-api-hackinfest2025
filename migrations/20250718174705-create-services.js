@@ -1,70 +1,168 @@
-// migrations/create-jasa.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Jasas', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('services', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING,
-        allowNull: false
+        type: Sequelize.STRING(100),
+        allowNull: false,
       },
       code: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(20),
         allowNull: false,
-        unique: true
+        unique: true,
       },
-      kelompok_jasa: {
-        type: Sequelize.STRING
+      group: {
+        type: Sequelize.STRING(50),
+        allowNull: false,
       },
       overview: {
-        type: Sequelize.TEXT
+        type: Sequelize.TEXT,
+        allowNull: false,
       },
-      url_intro_video: {
-        type: Sequelize.STRING
+      scope: {
+        type: Sequelize.TEXT,
+        allowNull: false,
       },
-      ruang_lingkup: {
-        type: Sequelize.TEXT
-      },
-      manfaat: {
-        type: Sequelize.TEXT
+      benefit: {
+        type: Sequelize.TEXT,
+        allowNull: false,
       },
       output: {
-        type: Sequelize.TEXT
+        type: Sequelize.TEXT,
+        allowNull: false,
       },
       regulation_ref: {
-        type: Sequelize.TEXT
+        type: Sequelize.TEXT,
+        allowNull: true,
       },
-      sbu_owner_id: {
-        type: Sequelize.INTEGER,
+      intro_video_url: {
+        type: Sequelize.STRING(255),
+        allowNull: true,
+      },
+      portfolio_id: {
+        type: Sequelize.UUID,
+        allowNull: false,
         references: {
-          model: 'UnitKerjas',
-          key: 'id'
-        }
+          model: 'portfolios',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
       },
       sub_portfolio_id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'SubPortfolios',
-          key: 'id'
-        }
+          model: 'sub_portfolios',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
       },
-      createdAt: {
+      sbu_owner_id: {
+        type: Sequelize.UUID,
         allowNull: false,
-        type: Sequelize.DATE
+        references: {
+          model: 'units',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
       },
-      updatedAt: {
+      created_by: {
+        type: Sequelize.UUID,
         allowNull: false,
-        type: Sequelize.DATE
-      }
+        references: {
+          model: 'users',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+      },
+      updated_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+      },
     });
+
+    await queryInterface.createTable('service_sectors', {
+      service_id: {
+        type: Sequelize.UUID,
+        primaryKey: true,
+        references: {
+          model: 'services',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      sector_id: {
+        type: Sequelize.UUID,
+        primaryKey: true,
+        references: {
+          model: 'sectors',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+      },
+    });
+
+    await queryInterface.createTable('service_sub_sectors', {
+      service_id: {
+        type: Sequelize.UUID,
+        primaryKey: true,
+        references: {
+          model: 'services',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      sub_sector_id: {
+        type: Sequelize.UUID,
+        primaryKey: true,
+        references: {
+          model: 'sub_sectors',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+      },
+    });
+
+    await queryInterface.addIndex('services', ['portfolio_id']);
+    await queryInterface.addIndex('services', ['sub_portfolio_id']);
+    await queryInterface.addIndex('services', ['sbu_owner_id']);
+    await queryInterface.addIndex('services', ['created_by']);
+    await queryInterface.addIndex('services', ['code']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Jasas');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('service_sub_sectors');
+    await queryInterface.dropTable('service_sectors');
+    await queryInterface.dropTable('services');
   }
 };

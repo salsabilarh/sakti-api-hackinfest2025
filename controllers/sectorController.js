@@ -1,186 +1,189 @@
+// controllers/sectorController.js
 const { Sector, SubSector } = require('../models');
 
-module.exports = {
-  // Get all sectors
-  getAllSectors: async (req, res) => {
-    try {
-      const sectors = await Sector.findAll({
-        include: [{
+exports.getAllSectors = async (req, res) => {
+  try {
+    const sectors = await Sector.findAll({
+      include: [
+        {
           model: SubSector,
           as: 'sub_sectors',
-          attributes: ['id', 'code', 'name']
-        }],
-        order: [['code', 'ASC']]
-      });
-      
-      res.json({
-        status: 'success',
-        data: sectors
-      });
-    } catch (error) {
-      console.error('Get sectors error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Internal server error'
-      });
-    }
-  },
+          attributes: ['id', 'name', 'code'],
+        },
+      ],
+      order: [['name', 'ASC']],
+    });
 
-  // Get single sector by ID
-  getSectorById: async (req, res) => {
-    try {
-      const sector = await Sector.findByPk(req.params.id, {
-        include: [{
+    res.json({ sectors });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sectors' });
+  }
+};
+
+exports.getSectorById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const sector = await Sector.findByPk(id, {
+      include: [
+        {
           model: SubSector,
           as: 'sub_sectors',
-          attributes: ['id', 'code', 'name']
-        }]
-      });
+          attributes: ['id', 'name', 'code'],
+        },
+      ],
+    });
 
-      if (!sector) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Sector not found'
-        });
-      }
-
-      res.json({
-        status: 'success',
-        data: sector
-      });
-    } catch (error) {
-      console.error('Get sector error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Internal server error'
-      });
+    if (!sector) {
+      return res.status(404).json({ error: 'Sector not found' });
     }
-  },
 
-  // Create new sector
-  createSector: async (req, res) => {
-    try {
-      const { code, name } = req.body;
+    res.json({ sector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sector details' });
+  }
+};
 
-      // Validate required fields
-      if (!code || !name) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Code and name are required'
-        });
-      }
+exports.createSector = async (req, res) => {
+  try {
+    const { name, code } = req.body;
 
-      // Check if code already exists
-      const existingSector = await Sector.findOne({ where: { code } });
-      if (existingSector) {
-        return res.status(409).json({
-          status: 'error',
-          message: 'Sector code already exists'
-        });
-      }
+    // Buat sector baru
+    const sector = await Sector.create({
+      name,
+      code,
+    });
 
-      const sector = await Sector.create({ code, name });
-      
-      res.status(201).json({
-        status: 'success',
-        data: sector,
-        message: 'Sector created successfully'
-      });
-    } catch (error) {
-      console.error('Create sector error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Internal server error'
-      });
+    res.status(201).json({ sector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create sector' });
+  }
+};
+
+exports.updateSector = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, code } = req.body;
+
+    // Cari sector berdasarkan ID
+    const sector = await Sector.findByPk(id);
+    if (!sector) {
+      return res.status(404).json({ error: 'Sector not found' });
     }
-  },
 
-  // Update sector
-  updateSector: async (req, res) => {
-    try {
-      const sector = await Sector.findByPk(req.params.id);
-      if (!sector) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Sector not found'
-        });
-      }
+    // Update data sector
+    await sector.update({
+      name: name || sector.name,
+      code: code || sector.code,
+    });
 
-      const { code, name } = req.body;
+    res.json({ sector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update sector' });
+  }
+};
 
-      // Validate at least one field to update
-      if (!code && !name) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'At least one field (code or name) is required for update'
-        });
-      }
+exports.deleteSector = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-      // Check if new code already exists
-      if (code && code !== sector.code) {
-        const existingSector = await Sector.findOne({ where: { code } });
-        if (existingSector) {
-          return res.status(409).json({
-            status: 'error',
-            message: 'Sector code already exists'
-          });
-        }
-      }
-
-      await sector.update({ code, name });
-      
-      res.json({
-        status: 'success',
-        data: sector,
-        message: 'Sector updated successfully'
-      });
-    } catch (error) {
-      console.error('Update sector error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Internal server error'
-      });
+    // Cari sector berdasarkan ID
+    const sector = await Sector.findByPk(id);
+    if (!sector) {
+      return res.status(404).json({ error: 'Sector not found' });
     }
-  },
 
-  // Delete sector
-  deleteSector: async (req, res) => {
-    try {
-      const sector = await Sector.findByPk(req.params.id, {
-        include: [{
-          model: SubSector,
-          as: 'sub_sectors'
-        }]
-      });
+    // Hapus sector
+    await sector.destroy();
 
-      if (!sector) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Sector not found'
-        });
-      }
+    res.json({ message: 'Sector deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete sector' });
+  }
+};
 
-      // Check if sector has sub-sectors
-      if (sector.sub_sectors && sector.sub_sectors.length > 0) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Cannot delete sector with associated sub-sectors',
-          subSectorCount: sector.sub_sectors.length
-        });
-      }
+exports.createSubSector = async (req, res) => {
+  try {
+    const { sector_id } = req.params;
+    const { name, code } = req.body;
 
-      await sector.destroy();
-      
-      res.json({
-        status: 'success',
-        message: 'Sector deleted successfully'
-      });
-    } catch (error) {
-      console.error('Delete sector error:', error);
-      res.status(500).json({ 
-        status: 'error',
-        message: 'Internal server error'
-      });
+    // Cari sector berdasarkan ID
+    const sector = await Sector.findByPk(sector_id);
+    if (!sector) {
+      return res.status(404).json({ error: 'Sector not found' });
     }
+
+    // Buat sub sector baru
+    const subSector = await SubSector.create({
+      name,
+      code,
+      sector_id,
+    });
+
+    res.status(201).json({ sub_sector: subSector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create sub sector' });
+  }
+};
+
+exports.updateSubSector = async (req, res) => {
+  try {
+    const { sector_id, sub_sector_id } = req.params;
+    const { name, code } = req.body;
+
+    // Cari sub sector berdasarkan ID
+    const subSector = await SubSector.findOne({
+      where: {
+        id: sub_sector_id,
+        sector_id,
+      },
+    });
+
+    if (!subSector) {
+      return res.status(404).json({ error: 'Sub sector not found' });
+    }
+
+    // Update data sub sector
+    await subSector.update({
+      name: name || subSector.name,
+      code: code || subSector.code,
+    });
+
+    res.json({ sub_sector: subSector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update sub sector' });
+  }
+};
+
+exports.deleteSubSector = async (req, res) => {
+  try {
+    const { sector_id, sub_sector_id } = req.params;
+
+    // Cari sub sector berdasarkan ID
+    const subSector = await SubSector.findOne({
+      where: {
+        id: sub_sector_id,
+        sector_id,
+      },
+    });
+
+    if (!subSector) {
+      return res.status(404).json({ error: 'Sub sector not found' });
+    }
+
+    // Hapus sub sector
+    await subSector.destroy();
+
+    res.json({ message: 'Sub sector deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete sub sector' });
   }
 };

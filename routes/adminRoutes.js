@@ -1,18 +1,83 @@
+// routes/adminRoutes.js
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
-// Protect all routes with admin authorization
-router.get('/admin/dashboard', authorize(['admin']), adminController.getDashboardStats);
-router.get('/admin/users', authorize(['admin']), adminController.getAllUsers);
-router.get('/admin/waiting-users', authorize(['admin']), adminController.getWaitingUsers);
-router.put('/admin/waiting-users/:id', authorize(['admin']), adminController.handleUserApproval);
-router.post('/admin/users', authorize(['admin']), adminController.createUser);
-router.put('/admin/users/:id', authorize(['admin']), adminController.updateUser);
-router.delete('/admin/users/:id', authorize(['admin']), adminController.deleteUser);
-router.get('/admin/password-reset-requests', authorize(['admin']), adminController.getPasswordResetRequests);
-router.put('/admin/password-reset-requests/:requestId/reset', authorize(['admin']), authController.adminResetPassword);
-router.get('/admin/download-logs', authorize(['admin']), adminController.getDownloadLogs);
+// Dashboard stats (admin only)
+router.get(
+  '/dashboard',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getDashboardStats
+);
+
+// User management (admin only)
+router.get(
+  '/users',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getAllUsers
+);
+router.post(
+  '/users',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.createUser
+);
+router.put(
+  '/users/:id',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.updateUser
+);
+router.delete(
+  '/users/:id',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.deleteUser
+);
+
+// Waiting users (admin only)
+router.get(
+  '/waiting-users',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getWaitingUsers
+);
+router.post(
+  '/waiting-users/:id/approve',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.approveUser
+);
+router.post(
+  '/waiting-users/:id/reject',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.rejectUser
+);
+
+// Password reset requests (admin only)
+router.get(
+  '/password-reset-requests',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getPasswordResetRequests
+);
+router.post(
+  '/password-reset-requests/:id/reset',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.resetUserPassword
+);
+
+// Download logs (admin only)
+router.get(
+  '/download-logs',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getDownloadLogs
+);
 
 module.exports = router;

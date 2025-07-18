@@ -2,234 +2,256 @@
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const { User, PasswordResetRequest } = require('../models');
-const { sendResetPasswordEmail } = require('../services/emailService');
-const config = require('../config/config');
+// const { sendResetPasswordEmail } = require('../utils/email');
 
-// Register new user
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      unit_kerja_id: user.unit_kerja_id,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+};
+
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, unit_kerja_id, role_id } = req.body;
-    
-    // Check if email already exists
+    const { email, password, full_name, unit_kerja_id, role } = req.body;
+
+    // Validasi role
+    const allowedRoles = ['management', 'viewer', 'pdo'];
+    if (role && !allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role for self-registration' });
+    }
+
+    // Cek apakah email sudah terdaftar
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ error: 'Email already registered' });
     }
-    
+
     // Hash password
     const hashedPassword = await argon2.hash(password);
-    
-    // Create user with verified: null (waiting for admin approval)
+
+    // Buat user baru dengan status verifikasi null (menunggu verifikasi admin)
     const user = await User.create({
-      name,
       email,
       password: hashedPassword,
+      full_name,
       unit_kerja_id,
-      role_id,
-      verified: null
+      role: role || 'viewer',
+      is_verified: null,
     });
-    
-    res.status(201).json({ 
-      message: 'User registered successfully. Waiting for admin approval.',
+
+    res.status(201).json({
+      message: 'Registration successful. Please wait for admin verification.',
       user: {
         id: user.id,
-        name: user.name,
         email: user.email,
+        full_name: user.full_name,
+        role: user.role,
         unit_kerja_id: user.unit_kerja_id,
-        role_id: user.role_id
-      }
+      },
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Registration failed' });
   }
 };
 
-// Login user
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Find user by email
-    const user = await User.findOne({ 
+
+    // Cari user berdasarkan email
+    const user = await User.findOne({
       where: { email },
-      include: ['UnitKerja', 'Role']
+      include: ['unit'],
     });
-    
-    // Check if user exists and is verified
-    if (!user || user.verified !== true) {
-      return res.status(401).json({ message: 'Invalid credentials or account not approved' });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    // Verify password
+
+    // Verifikasi password
     const isPasswordValid = await argon2.verify(user.password, password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
+    // Cek apakah user sudah diverifikasi
+    if (user.is_verified !== true) {
+      return res.status(403).json({ error: 'Account not verified by admin' });
+    }
+
+    // Cek apakah user aktif
+    if (!user.is_active) {
+      return res.status(403).json({ error: 'Account is inactive' });
+    }
+
     // Update last login
     await user.update({ last_login: new Date() });
-    
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email,
-        role: user.Role.name,
-        unit_kerja: user.UnitKerja.name
-      },
-      config.jwtSecret,
-      { expiresIn: '8h' }
-    );
-    
-    res.json({ 
+
+    // Generate token
+    const token = generateToken(user);
+
+    res.json({
+      message: 'Login successful',
       token,
       user: {
         id: user.id,
-        name: user.name,
         email: user.email,
-        role: user.Role.name,
-        unit_kerja: user.UnitKerja.name
-      }
+        full_name: user.full_name,
+        role: user.role,
+        unit_kerja: user.unit ? user.unit.name : null,
+      },
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Login failed' });
   }
 };
 
-// Forgot password - request reset
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['id', 'full_name', 'email', 'role', 'created_at'],
+      include: [
+        {
+          association: 'unit',
+          attributes: ['name'],
+        },
+      ],
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      user: {
+        ...user.toJSON(),
+        unit_kerja: user.unit ? user.unit.name : null,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get profile' });
+  }
+};
+
+exports.updatePassword = async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    const user = await User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verifikasi password saat ini
+    const isPasswordValid = await argon2.verify(user.password, current_password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash password baru
+    const hashedPassword = await argon2.hash(new_password);
+
+    // Update password
+    await user.update({ password: hashedPassword });
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+};
+
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    
-    // Find user by email
+
+    // Cari user berdasarkan email
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ error: 'Email not found' });
     }
-    
-    // Create password reset request
-    const resetRequest = await PasswordResetRequest.create({
+
+    // Buat token reset password
+    const resetToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_RESET_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Simpan token ke database
+    await user.update({
+      reset_token: resetToken,
+      reset_token_expires: new Date(Date.now() + 3600000), // 1 jam dari sekarang
+    });
+
+    // Buat request reset password
+    await PasswordResetRequest.create({
       user_id: user.id,
-      status: 'pending'
+      is_processed: false,
     });
-    
-    // In a real application, you would send an email to admin here
-    // For this example, we'll just return the request ID
-    res.json({ 
-      message: 'Password reset request submitted. Admin will contact you shortly.',
-      request_id: resetRequest.id
-    });
+
+    res.json({ message: 'Password reset request submitted. Please wait for admin to process.' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to process forgot password request' });
   }
 };
 
-// Reset password (admin action)
 exports.resetPassword = async (req, res) => {
   try {
-    const { request_id } = req.params;
-    const { admin_id } = req.user; // Assuming admin is logged in
-    
-    // Find the reset request
-    const resetRequest = await PasswordResetRequest.findOne({
-      where: { id: request_id, status: 'pending' },
-      include: ['User']
+    const { token, new_password } = req.body;
+
+    // Verifikasi token
+    const decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
+
+    // Cari user berdasarkan ID dari token
+    const user = await User.findOne({
+      where: {
+        id: decoded.id,
+        reset_token: token,
+        reset_token_expires: { [Sequelize.Op.gt]: new Date() },
+      },
     });
-    
-    if (!resetRequest) {
-      return res.status(404).json({ message: 'Request not found or already handled' });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired token' });
     }
-    
-    // Generate a default password
-    const defaultPassword = 'Password123!'; // In production, generate a random strong password
-    
-    // Hash the new password
-    const hashedPassword = await argon2.hash(defaultPassword);
-    
-    // Update user's password
-    await resetRequest.User.update({ 
+
+    // Hash password baru
+    const hashedPassword = await argon2.hash(new_password);
+
+    // Update password dan hapus token
+    await user.update({
       password: hashedPassword,
-      reset_password_token: null,
-      reset_password_expires: null
+      reset_token: null,
+      reset_token_expires: null,
     });
-    
-    // Update the reset request
-    await resetRequest.update({
-      handled_by: admin_id,
-      handled_at: new Date(),
-      status: 'completed'
-    });
-    
-    // Send email to user with new password
-    await sendResetPasswordEmail(resetRequest.User.email, defaultPassword);
-    
-    res.json({ message: 'Password reset successfully. User has been notified via email.' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
 
-// Change password (user action)
-exports.changePassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    const userId = req.user.id;
-    
-    // Find user
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Verify current password
-    const isPasswordValid = await argon2.verify(user.password, currentPassword);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Current password is incorrect' });
-    }
-    
-    // Hash new password
-    const hashedPassword = await argon2.hash(newPassword);
-    
-    // Update password
-    await user.update({ password: hashedPassword });
-    
-    res.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
+    // Update password reset request
+    await PasswordResetRequest.update(
+      { is_processed: true, processed_by: req.user.id, processed_at: new Date() },
+      { where: { user_id: user.id, is_processed: false } }
+    );
 
-// Get user profile
-exports.getProfile = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const user = await User.findByPk(userId, {
-      attributes: ['id', 'name', 'email', 'last_login'],
-      include: [
-        {
-          association: 'UnitKerja',
-          attributes: ['name']
-        },
-        {
-          association: 'Role',
-          attributes: ['name']
-        }
-      ]
-    });
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    res.json(user);
+    res.json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(400).json({ error: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({ error: 'Token expired' });
+    }
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 };

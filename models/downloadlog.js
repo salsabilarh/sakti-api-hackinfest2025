@@ -1,20 +1,26 @@
-// models/downloadlog.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class DownloadLog extends Model {
-    static associate(models) {
-      DownloadLog.belongsTo(models.MarketingKit, { foreignKey: 'marketing_kit_id' });
-      DownloadLog.belongsTo(models.User, { foreignKey: 'user_id' });
-    }
-  }
-  DownloadLog.init({
-    marketing_kit_id: DataTypes.INTEGER,
-    user_id: DataTypes.INTEGER,
-    purpose: DataTypes.TEXT,
-    downloaded_at: DataTypes.DATE
+  const DownloadLog = sequelize.define('DownloadLog', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    purpose: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
   }, {
-    sequelize,
-    modelName: 'DownloadLog',
+    tableName: 'download_logs',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: false,
   });
+
+  DownloadLog.associate = (models) => {
+    DownloadLog.belongsTo(models.MarketingKit, { foreignKey: 'marketing_kit_id', as: 'marketing_kit' });
+    DownloadLog.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+  };
+
   return DownloadLog;
 };

@@ -1,30 +1,84 @@
-// models/jasa.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class Jasa extends Model {
-    static associate(models) {
-      Jasa.belongsTo(models.SubPortfolio, { foreignKey: 'sub_portfolio_id' });
-      Jasa.belongsTo(models.UnitKerja, { foreignKey: 'sbu_owner_id' });
-      Jasa.belongsToMany(models.Sektor, { through: 'JasaSektors', foreignKey: 'jasa_id' });
-      Jasa.belongsToMany(models.SubSektor, { through: 'JasaSektors', foreignKey: 'jasa_id' });
-      Jasa.hasMany(models.MarketingKit, { foreignKey: 'jasa_id' });
-    }
-  }
-  Jasa.init({
-    name: DataTypes.STRING,
-    code: DataTypes.STRING,
-    kelompok_jasa: DataTypes.STRING,
-    overview: DataTypes.TEXT,
-    url_intro_video: DataTypes.STRING,
-    ruang_lingkup: DataTypes.TEXT,
-    manfaat: DataTypes.TEXT,
-    output: DataTypes.TEXT,
-    regulation_ref: DataTypes.TEXT,
-    sbu_owner_id: DataTypes.INTEGER,
-    sub_portfolio_id: DataTypes.INTEGER
+  const Service = sequelize.define('Service', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    code: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      unique: true,
+    },
+    group: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
+    overview: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    scope: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    benefit: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    output: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    regulation_ref: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    intro_video_url: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
   }, {
-    sequelize,
-    modelName: 'Jasa',
+    tableName: 'services',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
   });
-  return Jasa;
+
+  Service.associate = (models) => {
+    Service.belongsTo(models.Portfolio, { foreignKey: 'portfolio_id', as: 'portfolio' });
+    Service.belongsTo(models.SubPortfolio, { foreignKey: 'sub_portfolio_id', as: 'sub_portfolio' });
+    Service.belongsTo(models.Unit, { foreignKey: 'sbu_owner_id', as: 'sbu_owner' });
+    Service.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
+    Service.belongsToMany(models.Sector, { through: 'service_sectors', as: 'sectors' });
+    Service.belongsToMany(models.SubSector, { through: 'service_sub_sectors', as: 'sub_sectors' });
+    Service.hasMany(models.MarketingKit, { foreignKey: 'service_id', as: 'marketing_kits' });
+  };
+
+  // Hook untuk generate kode jasa otomatis
+  Service.beforeCreate(async (service, options) => {
+    if (!service.code) {
+      const subPortfolio = await service.getSub_portfolio();
+      const lastService = await Service.findOne({
+        where: { sub_portfolio_id: service.sub_portfolio_id },
+        order: [['created_at', 'DESC']],
+      });
+
+      let nextChar = 'A';
+      if (lastService) {
+        const lastCode = lastService.code;
+        const lastChar = lastCode.charAt(lastCode.length - 1);
+        nextChar = String.fromCharCode(lastChar.charCodeAt(0) + 1);
+      }
+
+      service.code = `${subPortfolio.code}${nextChar}`;
+    }
+  });
+
+  return Service;
 };

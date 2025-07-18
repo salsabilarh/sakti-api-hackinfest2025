@@ -1,34 +1,39 @@
-// migrations/create-sektor.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Sektors', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('sectors', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING,
-        allowNull: false
+        type: Sequelize.STRING(100),
+        allowNull: false,
+        unique: true,
       },
       code: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(20),
         allowNull: false,
-        unique: true
+        unique: true,
       },
-      createdAt: {
+      created_at: {
+        type: Sequelize.DATE,
         allowNull: false,
-        type: Sequelize.DATE
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
       },
-      updatedAt: {
+      updated_at: {
+        type: Sequelize.DATE,
         allowNull: false,
-        type: Sequelize.DATE
-      }
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+      },
     });
+
+    await queryInterface.addIndex('sectors', ['code']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Sektors');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('sectors');
   }
 };

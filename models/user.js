@@ -1,36 +1,73 @@
-// models/user.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class User extends Model {
-    static associate(models) {
-      User.belongsTo(models.UnitKerja, { foreignKey: 'unit_kerja_id' });
-      User.belongsTo(models.Role, { foreignKey: 'role_id' });
-      User.hasMany(models.MarketingKit, { foreignKey: 'uploaded_by' });
-      User.hasMany(models.DownloadLog, { foreignKey: 'user_id' });
-      User.hasMany(models.PasswordResetRequest, { foreignKey: 'user_id' });
-      User.hasMany(models.PasswordResetRequest, { foreignKey: 'handled_by' });
-    }
-  }
-  User.init({
-    name: DataTypes.STRING,
+  const User = sequelize.define('User', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    full_name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
     email: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
+      allowNull: false,
       unique: true,
       validate: {
-        isEmail: true
-      }
+        isEmail: true,
+      },
     },
-    password: DataTypes.STRING,
-    unit_kerja_id: DataTypes.INTEGER,
-    role_id: DataTypes.INTEGER,
-    verified: DataTypes.BOOLEAN,
-    active: DataTypes.BOOLEAN,
-    last_login: DataTypes.DATE,
-    reset_password_token: DataTypes.STRING,
-    reset_password_expires: DataTypes.DATE
+    password: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    role: {
+      type: DataTypes.STRING(10),
+      defaultValue: 'viewer',
+      allowNull: false,
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    is_verified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: null,
+    },
+    last_login: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    reset_token: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    reset_token_expires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   }, {
-    sequelize,
-    modelName: 'User',
+    tableName: 'users',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+    defaultScope: {
+      attributes: { exclude: ['password', 'reset_token', 'reset_token_expires'] },
+    },
+    scopes: {
+      withPassword: {
+        attributes: { include: ['password'] },
+      },
+    },
   });
+
+  User.associate = (models) => {
+    User.belongsTo(models.Unit, { foreignKey: 'unit_kerja_id', as: 'unit' });
+    User.hasMany(models.Service, { foreignKey: 'created_by', as: 'services' });
+    User.hasMany(models.MarketingKit, { foreignKey: 'uploaded_by', as: 'marketing_kits' });
+    User.hasMany(models.DownloadLog, { foreignKey: 'user_id', as: 'download_logs' });
+  };
+
   return User;
 };

@@ -1,54 +1,64 @@
 // migrations/create-marketing-kit.js
 'use strict';
+
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('MarketingKits', {
+  up: async (queryInterface, Sequelize) => {
+    await queryInterface.createTable('marketing_kits', {
       id: {
-        allowNull: false,
-        autoIncrement: true,
+        type: Sequelize.UUID,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING,
-        allowNull: false
-      },
-      file_type: {
-        type: Sequelize.ENUM('flyer', 'pitch_deck', 'dokumentasi_teknik', 'lainnya'),
-        allowNull: false
+        type: Sequelize.STRING(100),
+        allowNull: false,
       },
       file_path: {
-        type: Sequelize.STRING,
-        allowNull: false
+        type: Sequelize.STRING(255),
+        allowNull: false,
       },
-      file_size: {
-        type: Sequelize.INTEGER
+      file_type: {
+        type: Sequelize.STRING(20),
+        allowNull: false,
       },
-      jasa_id: {
-        type: Sequelize.INTEGER,
+      service_id: {
+        type: Sequelize.UUID,
+        allowNull: false,
         references: {
-          model: 'Jasas',
-          key: 'id'
-        }
+          model: 'services',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
       },
       uploaded_by: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
+        allowNull: false,
         references: {
-          model: 'Users',
-          key: 'id'
-        }
+          model: 'users',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT',
       },
-      createdAt: {
+      created_at: {
+        type: Sequelize.DATE,
         allowNull: false,
-        type: Sequelize.DATE
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
       },
-      updatedAt: {
+      updated_at: {
+        type: Sequelize.DATE,
         allowNull: false,
-        type: Sequelize.DATE
-      }
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+      },
     });
+
+    await queryInterface.addIndex('marketing_kits', ['service_id']);
+    await queryInterface.addIndex('marketing_kits', ['uploaded_by']);
+    await queryInterface.addIndex('marketing_kits', ['file_type']);
   },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('MarketingKits');
+
+  down: async (queryInterface, Sequelize) => {
+    await queryInterface.dropTable('marketing_kits');
   }
 };

@@ -1,47 +1,51 @@
 // app.js
+require('dotenv').config({ debug: true });
 const express = require('express');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const logger = require('morgan');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
-const { Sequelize } = require('sequelize');
-const config = require('./config/config');
+const rateLimit = require('express-rate-limit');
+const { sequelize } = require('./models');
 
-// Initialize Express app
+// Database connection
+sequelize.authenticate()
+  .then(() => console.log('Database connected successfully'))
+  .catch(err => console.error('Database connection error:', err));
+
 const app = express();
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later'
+});
 
 // Middleware
 app.use(cors());
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(limiter);
+app.use(logger('dev'));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Database connection
-const sequelize = new Sequelize(config.db);
-
-// Test database connection
-sequelize.authenticate()
-  .then(() => console.log('Database connected'))
-  .catch(err => console.error('Database connection error:', err));
-
-// Sync models
-sequelize.sync({ alter: true })
-  .then(() => console.log('Database synced'))
-  .catch(err => console.error('Database sync error:', err));
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
-app.use('/api', require('./routes'));
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/adminRoutes'));
+app.use('/api/units', require('./routes/unitRoutes'));
+app.use('/api/portfolios', require('./routes/portfolioRoutes'));
+app.use('/api/services', require('./routes/serviceRoutes'));
+app.use('/api/marketing-kits', require('./routes/marketingKitRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something broke!' });
-});
-
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 module.exports = app;

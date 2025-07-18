@@ -1,19 +1,31 @@
-// models/subportfolio.js
-const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-  class SubPortfolio extends Model {
-    static associate(models) {
-      SubPortfolio.belongsTo(models.Portfolio, { foreignKey: 'portfolio_id' });
-      SubPortfolio.hasMany(models.Jasa, { foreignKey: 'sub_portfolio_id' });
-    }
-  }
-  SubPortfolio.init({
-    name: DataTypes.STRING,
-    code: DataTypes.STRING,
-    portfolio_id: DataTypes.INTEGER
+  const SubPortfolio = sequelize.define('SubPortfolio', {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    code: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      unique: true,
+    },
   }, {
-    sequelize,
-    modelName: 'SubPortfolio',
+    tableName: 'sub_portfolios',
+    timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
   });
+
+  SubPortfolio.associate = (models) => {
+    SubPortfolio.belongsTo(models.Portfolio, { foreignKey: 'portfolio_id', as: 'portfolio' });
+    SubPortfolio.hasMany(models.Service, { foreignKey: 'sub_portfolio_id', as: 'services' });
+  };
+
   return SubPortfolio;
 };

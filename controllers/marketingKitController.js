@@ -1,132 +1,211 @@
 // controllers/marketingKitController.js
-const { MarketingKit, Jasa, User, DownloadLog } = require('../models');
-const { Op } = require('sequelize');
+const { MarketingKit, Service, User, DownloadLog } = require('../models');
 const fs = require('fs');
 const path = require('path');
-const config = require('../config/config');
+const { Op } = require('sequelize');
 
-// Get all marketing kits with filters
 exports.getAllMarketingKits = async (req, res) => {
   try {
-    const { jasa, file_type, search } = req.query;
-    
-    // Build filter object
-    const filter = {};
-    if (jasa) filter.jasa_id = jasa;
-    if (file_type) filter.file_type = file_type;
-    
-    // Build search condition
-    const searchCondition = search ? {
-      [Op.or]: [
+    const { search, service, file_type } = req.query;
+    const where = {};
+    const include = [];
+
+    // Filter berdasarkan search
+    if (search) {
+      where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
-        { '$Jasa.name$': { [Op.like]: `%${search}%` } }
-      ]
-    } : {};
-    
+        { '$service.name$': { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // Filter berdasarkan service
+    if (service) {
+      include.push({
+        model: Service,
+        as: 'service',
+        where: { id: service },
+        attributes: [],
+      });
+    }
+
+    // Filter berdasarkan file_type
+    if (file_type) {
+      where.file_type = file_type;
+    }
+
+    // Dapatkan marketing kits berdasarkan filter
     const marketingKits = await MarketingKit.findAll({
-      where: { ...filter, ...searchCondition },
+      where,
       include: [
+        ...include,
         {
-          model: Jasa,
-          attributes: ['name']
+          model: Service,
+          as: 'service',
+          attributes: ['id', 'name', 'code'],
         },
         {
           model: User,
-          as: 'uploaded_by_user',
-          attributes: ['name']
-        }
+          as: 'uploader',
+          attributes: ['id', 'full_name', 'email'],
+        },
       ],
-      attributes: ['id', 'name', 'file_type', 'file_path', 'file_size', 'createdAt', 'updatedAt'],
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']],
     });
-    
-    res.json(marketingKits);
+
+    res.json({ marketing_kits: marketingKits });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to get marketing kits' });
   }
 };
 
-// Upload marketing kit file
-exports.uploadMarketingKit = async (req, res) => {
+exports.getMarketingKitById = async (req, res) => {
   try {
-    const { name, file_type, jasa_id } = req.body;
-    const uploaded_by = req.user.id;
-    
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-    
-    // Create marketing kit record
-    const marketingKit = await MarketingKit.create({
-      name,
-      file_type,
-      file_path: req.file.path,
-      file_size: req.file.size,
-      jasa_id,
-      uploaded_by
+    const { id } = req.params;
+
+    const marketingKit = await MarketingKit.findByPk(id, {
+      include: [
+        {
+          model: Service,
+          as: 'service',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'uploader',
+          attributes: ['id', 'full_name', 'email'],
+        },
+      ],
     });
-    
-    res.status(201).json(marketingKit);
+
+    if (!marketingKit) {
+      return res.status(404).json({ error: 'Marketing kit not found' });
+    }
+
+    res.json({ marketing_kit: marketingKit });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to get marketing kit details' });
   }
 };
 
-// Download marketing kit file
 exports.downloadMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
     const { purpose } = req.body;
-    const userId = req.user.id;
-    
+
+    // Cari marketing kit berdasarkan ID
     const marketingKit = await MarketingKit.findByPk(id);
     if (!marketingKit) {
-      return res.status(404).json({ message: 'File not found' });
+      return res.status(404).json({ error: 'Marketing kit not found' });
     }
-    
-    // Check if file exists
-    if (!fs.existsSync(marketingKit.file_path)) {
-      return res.status(404).json({ message: 'File not found on server' });
-    }
-    
-    // Log the download
+
+    // Buat log download
     await DownloadLog.create({
       marketing_kit_id: id,
-      user_id: userId,
-      purpose
+      user_id: req.user.id,
+      purpose,
     });
-    
-    // Send the file
-    res.download(marketingKit.file_path, marketingKit.name);
+
+    // Dapatkan path file
+    const filePath = path.join(__dirname, '..', 'uploads', marketingKit.file_path);
+
+    // Download file
+    res.download(filePath, marketingKit.name, (err) => {
+      if (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to download file' });
+      }
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to download marketing kit' });
   }
 };
 
-// Delete marketing kit file
+exports.uploadMarketingKit = async (req, res) => {
+  try {
+    const { service_id, file_type } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Cari service berdasarkan ID
+    const service = await Service.findByPk(service_id);
+    if (!service) {
+      // Hapus file yang sudah diupload jika service tidak ditemukan
+      fs.unlinkSync(file.path);
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    // Buat marketing kit baru
+    const marketingKit = await MarketingKit.create({
+      name: file.originalname,
+      file_path: file.filename,
+      file_type,
+      service_id,
+      uploaded_by: req.user.id,
+    });
+
+    res.status(201).json({ marketing_kit: marketingKit });
+  } catch (error) {
+    console.error(error);
+    // Hapus file yang sudah diupload jika terjadi error
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Failed to upload marketing kit' });
+  }
+};
+
+exports.updateMarketingKit = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, file_type } = req.body;
+
+    // Cari marketing kit berdasarkan ID
+    const marketingKit = await MarketingKit.findByPk(id);
+    if (!marketingKit) {
+      return res.status(404).json({ error: 'Marketing kit not found' });
+    }
+
+    // Update data marketing kit
+    await marketingKit.update({
+      name: name || marketingKit.name,
+      file_type: file_type || marketingKit.file_type,
+    });
+
+    res.json({ marketing_kit: marketingKit });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update marketing kit' });
+  }
+};
+
 exports.deleteMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
+    // Cari marketing kit berdasarkan ID
     const marketingKit = await MarketingKit.findByPk(id);
     if (!marketingKit) {
-      return res.status(404).json({ message: 'File not found' });
+      return res.status(404).json({ error: 'Marketing kit not found' });
     }
-    
-    // Delete file from filesystem
-    if (fs.existsSync(marketingKit.file_path)) {
-      fs.unlinkSync(marketingKit.file_path);
-    }
-    
-    // Delete record from database
+
+    // Dapatkan path file
+    const filePath = path.join(__dirname, '..', 'uploads', marketingKit.file_path);
+
+    // Hapus file dari sistem file
+    fs.unlinkSync(filePath);
+
+    // Hapus marketing kit dari database
     await marketingKit.destroy();
-    
+
     res.json({ message: 'Marketing kit deleted successfully' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to delete marketing kit' });
   }
 };

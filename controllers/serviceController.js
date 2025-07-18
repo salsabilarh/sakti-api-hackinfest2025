@@ -1,258 +1,315 @@
-// controllers/jasaController.js
-const { Jasa, SubPortfolio, UnitKerja, Sektor, SubSektor, JasaSektor } = require('../models');
+// controllers/serviceController.js
+const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
 
-// Get all jasas with filters
-exports.getAllJasas = async (req, res) => {
+exports.getAllServices = async (req, res) => {
   try {
-    const { sektor, portfolio, search } = req.query;
-    
-    // Build filter object
-    const filter = {};
-    if (sektor) {
-      filter['$JasaSektors.sektor_id$'] = sektor;
-    }
-    if (portfolio) {
-      filter['$SubPortfolio.portfolio_id$'] = portfolio;
-    }
-    
-    // Build search condition
-    const searchCondition = search ? {
-      [Op.or]: [
+    const { search, portfolio, sector } = req.query;
+    const where = {};
+    const include = [];
+
+    // Filter berdasarkan search
+    if (search) {
+      where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
         { code: { [Op.like]: `%${search}%` } },
-        { '$SubPortfolio.code$': { [Op.like]: `%${search}%` } },
-        { '$JasaSektors.Sektor.code$': { [Op.like]: `%${search}%` } }
-      ]
-    } : {};
-    
-    const jasas = await Jasa.findAll({
-      where: { ...filter, ...searchCondition },
-      include: [
-        {
-          model: SubPortfolio,
-          attributes: ['name', 'code'],
-          include: [
-            {
-              association: 'Portfolio',
-              attributes: ['name', 'code']
-            }
-          ]
-        },
-        {
-          model: UnitKerja,
-          as: 'sbu_owner',
-          attributes: ['name']
-        },
-        {
-          model: Sektor,
-          through: { attributes: [] },
-          attributes: ['name', 'code']
-        }
-      ],
-      attributes: ['id', 'name', 'code', 'kelompok_jasa']
-    });
-    
-    res.json(jasas);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
+      ];
+    }
 
-// Get jasa details
-exports.getJasaDetails = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const jasa = await Jasa.findByPk(id, {
+    // Filter berdasarkan portfolio
+    if (portfolio) {
+      include.push({
+        model: Portfolio,
+        as: 'portfolio',
+        where: { id: portfolio },
+        attributes: [],
+      });
+    }
+
+    // Filter berdasarkan sector
+    if (sector) {
+      include.push({
+        model: Sector,
+        as: 'sectors',
+        where: { id: sector },
+        attributes: [],
+        through: { attributes: [] },
+      });
+    }
+
+    // Dapatkan services berdasarkan filter
+    const services = await Service.findAll({
+      where,
       include: [
+        ...include,
         {
-          model: SubPortfolio,
-          attributes: ['name', 'code'],
-          include: [
-            {
-              association: 'Portfolio',
-              attributes: ['name', 'code']
-            }
-          ]
-        },
-        {
-          model: UnitKerja,
-          as: 'sbu_owner',
-          attributes: ['name']
-        },
-        {
-          model: Sektor,
-          through: { attributes: [] },
+          model: Portfolio,
+          as: 'portfolio',
           attributes: ['id', 'name', 'code'],
-          include: [
-            {
-              model: SubSektor,
-              through: { attributes: [] },
-              attributes: ['id', 'name', 'code']
-            }
-          ]
-        }
-      ]
+        },
+        {
+          model: SubPortfolio,
+          as: 'sub_portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Unit,
+          as: 'sbu_owner',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+      ],
+      attributes: ['id', 'name', 'code', 'group', 'created_at'],
     });
-    
-    if (!jasa) {
-      return res.status(404).json({ message: 'Jasa not found' });
-    }
-    
-    res.json(jasa);
+
+    res.json({ services });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to get services' });
   }
 };
 
-// Create new jasa
-exports.createJasa = async (req, res) => {
+exports.getServiceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const service = await Service.findByPk(id, {
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: SubPortfolio,
+          as: 'sub_portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Unit,
+          as: 'sbu_owner',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+        {
+          model: SubSector,
+          as: 'sub_sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+        {
+          model: MarketingKit,
+          as: 'marketing_kits',
+          attributes: ['id', 'name', 'file_type', 'created_at'],
+        },
+      ],
+    });
+
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    res.json({ service });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get service details' });
+  }
+};
+
+exports.createService = async (req, res) => {
   try {
     const {
       name,
-      kelompok_jasa,
-      url_intro_video,
+      group,
+      intro_video_url,
       overview,
-      manfaat,
-      ruang_lingkup,
+      scope,
+      benefit,
       output,
       regulation_ref,
-      sbu_owner_id,
+      portfolio_id,
       sub_portfolio_id,
-      sektor_ids,
-      sub_sektor_ids
+      sbu_owner_id,
+      sectors,
+      sub_sectors,
     } = req.body;
-    
-    // Get sub portfolio to generate code
-    const subPortfolio = await SubPortfolio.findByPk(sub_portfolio_id);
-    if (!subPortfolio) {
-      return res.status(404).json({ message: 'Sub Portfolio not found' });
-    }
-    
-    // Find the latest jasa with this sub portfolio to generate next code
-    const latestJasa = await Jasa.findOne({
-      where: { sub_portfolio_id },
-      order: [['code', 'DESC']],
-      limit: 1
-    });
-    
-    let nextCode;
-    if (!latestJasa) {
-      nextCode = `${subPortfolio.code}A`;
-    } else {
-      const lastChar = latestJasa.code.slice(-1);
-      nextCode = `${subPortfolio.code}${String.fromCharCode(lastChar.charCodeAt(0) + 1)}`;
-    }
-    
-    // Create jasa
-    const jasa = await Jasa.create({
+
+    // Buat service baru
+    const service = await Service.create({
       name,
-      code: nextCode,
-      kelompok_jasa,
-      url_intro_video,
+      group,
+      intro_video_url,
       overview,
-      manfaat,
-      ruang_lingkup,
+      scope,
+      benefit,
       output,
       regulation_ref,
+      portfolio_id,
+      sub_portfolio_id,
       sbu_owner_id,
-      sub_portfolio_id
+      created_by: req.user.id,
     });
-    
-    // Add sektor and sub sektor associations
-    if (sektor_ids && sektor_ids.length > 0) {
-      const jasaSektorData = sektor_ids.map((sektor_id, index) => ({
-        jasa_id: jasa.id,
-        sektor_id,
-        sub_sektor_id: sub_sektor_ids[index] || null
-      }));
-      
-      await JasaSektor.bulkCreate(jasaSektorData);
+
+    // Tambahkan sectors dan sub_sectors jika ada
+    if (sectors && sectors.length > 0) {
+      await service.addSectors(sectors);
     }
-    
-    res.status(201).json(jasa);
+
+    if (sub_sectors && sub_sectors.length > 0) {
+      await service.addSub_sectors(sub_sectors);
+    }
+
+    // Dapatkan service dengan relasi yang lengkap untuk response
+    const createdService = await Service.findByPk(service.id, {
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: SubPortfolio,
+          as: 'sub_portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Unit,
+          as: 'sbu_owner',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+        {
+          model: SubSector,
+          as: 'sub_sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    res.status(201).json({ service: createdService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to create service' });
   }
 };
 
-// Update jasa
-exports.updateJasa = async (req, res) => {
+exports.updateService = async (req, res) => {
   try {
     const { id } = req.params;
     const {
       name,
-      kelompok_jasa,
-      url_intro_video,
+      group,
+      intro_video_url,
       overview,
-      manfaat,
-      ruang_lingkup,
+      scope,
+      benefit,
       output,
       regulation_ref,
       sbu_owner_id,
-      sektor_ids,
-      sub_sektor_ids
+      sectors,
+      sub_sectors,
     } = req.body;
-    
-    const jasa = await Jasa.findByPk(id);
-    if (!jasa) {
-      return res.status(404).json({ message: 'Jasa not found' });
+
+    // Cari service berdasarkan ID
+    const service = await Service.findByPk(id);
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
     }
-    
-    // Update jasa
-    await jasa.update({
-      name: name || jasa.name,
-      kelompok_jasa: kelompok_jasa || jasa.kelompok_jasa,
-      url_intro_video: url_intro_video || jasa.url_intro_video,
-      overview: overview || jasa.overview,
-      manfaat: manfaat || jasa.manfaat,
-      ruang_lingkup: ruang_lingkup || jasa.ruang_lingkup,
-      output: output || jasa.output,
-      regulation_ref: regulation_ref || jasa.regulation_ref,
-      sbu_owner_id: sbu_owner_id || jasa.sbu_owner_id
+
+    // Update data service
+    await service.update({
+      name,
+      group,
+      intro_video_url,
+      overview,
+      scope,
+      benefit,
+      output,
+      regulation_ref,
+      sbu_owner_id,
     });
-    
-    // Update sektor associations if provided
-    if (sektor_ids && sektor_ids.length > 0) {
-      // Remove existing associations
-      await JasaSektor.destroy({ where: { jasa_id: jasa.id } });
-      
-      // Add new associations
-      const jasaSektorData = sektor_ids.map((sektor_id, index) => ({
-        jasa_id: jasa.id,
-        sektor_id,
-        sub_sektor_id: sub_sektor_ids[index] || null
-      }));
-      
-      await JasaSektor.bulkCreate(jasaSektorData);
+
+    // Update sectors dan sub_sectors jika ada
+    if (sectors) {
+      await service.setSectors(sectors);
     }
-    
-    res.json(jasa);
+
+    if (sub_sectors) {
+      await service.setSub_sectors(sub_sectors);
+    }
+
+    // Dapatkan service yang sudah diupdate dengan relasi lengkap
+    const updatedService = await Service.findByPk(id, {
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: SubPortfolio,
+          as: 'sub_portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Unit,
+          as: 'sbu_owner',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+        {
+          model: SubSector,
+          as: 'sub_sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    res.json({ service: updatedService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to update service' });
   }
 };
 
-// Delete jasa
-exports.deleteJasa = async (req, res) => {
+exports.deleteService = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    const jasa = await Jasa.findByPk(id);
-    if (!jasa) {
-      return res.status(404).json({ message: 'Jasa not found' });
+
+    // Cari service berdasarkan ID
+    const service = await Service.findByPk(id);
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
     }
-    
-    await jasa.destroy();
-    
-    res.json({ message: 'Jasa deleted successfully' });
+
+    // Hapus service
+    await service.destroy();
+
+    res.json({ message: 'Service deleted successfully' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Failed to delete service' });
   }
 };
