@@ -4,7 +4,7 @@ const { Unit } = require('../models');
 exports.getAllUnits = async (req, res) => {
   try {
     const units = await Unit.findAll({
-      attributes: ['id', 'name', 'code', 'type'],
+      attributes: ['id', 'name', 'type'],
       order: [['name', 'ASC']],
     });
 
@@ -20,7 +20,7 @@ exports.getUnitById = async (req, res) => {
     const { id } = req.params;
 
     const unit = await Unit.findByPk(id, {
-      attributes: ['id', 'name', 'code', 'type'],
+      attributes: ['id', 'name', 'type'],
     });
 
     if (!unit) {
@@ -41,7 +41,6 @@ exports.createUnit = async (req, res) => {
     // Buat unit baru
     const unit = await Unit.create({
       name,
-      code,
       type,
     });
 
@@ -55,7 +54,7 @@ exports.createUnit = async (req, res) => {
 exports.updateUnit = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code, type } = req.body;
+    const { name, type } = req.body;
 
     // Cari unit berdasarkan ID
     const unit = await Unit.findByPk(id);
@@ -66,7 +65,6 @@ exports.updateUnit = async (req, res) => {
     // Update data unit
     await unit.update({
       name: name || unit.name,
-      code: code || unit.code,
       type: type || unit.type,
     });
 

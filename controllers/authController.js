@@ -2,6 +2,7 @@
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const { User, Unit, PasswordResetRequest } = require('../models');
+const { Op } = require('sequelize');
 // const { sendResetPasswordEmail } = require('../utils/email');
 
 // Helper function
@@ -221,16 +222,22 @@ exports.getProfile = async (req, res) => {
 exports.updatePassword = async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
-    const user = await User.findByPk(req.user.id);
+
+    const user = await User.scope('withPassword').findByPk(req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Verifikasi password saat ini
+    // Cek apakah password lama tersedia
+    if (!user.password || user.password.trim() === '') {
+      return res.status(400).json({ error: 'Password lama tidak tersedia, tidak dapat diverifikasi' });
+    }
+
+    // Verifikasi password lama
     const isPasswordValid = await argon2.verify(user.password, current_password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+      return res.status(401).json({ error: 'Password lama salah' });
     }
 
     // Hash password baru
@@ -239,16 +246,20 @@ exports.updatePassword = async (req, res) => {
     // Update password
     await user.update({ password: hashedPassword });
 
-    res.json({ message: 'Password updated successfully' });
+    res.json({ message: 'Password berhasil diperbarui' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to update password' });
+    res.status(500).json({ error: 'Gagal memperbarui password' });
   }
 };
 
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
 
     // Cari user berdasarkan email
     const user = await User.findOne({ where: { email } });
@@ -260,7 +271,7 @@ exports.forgotPassword = async (req, res) => {
     const resetToken = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_RESET_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '30d' }
     );
 
     // Simpan token ke database
@@ -294,7 +305,7 @@ exports.resetPassword = async (req, res) => {
       where: {
         id: decoded.id,
         reset_token: token,
-        reset_token_expires: { [Sequelize.Op.gt]: new Date() },
+        reset_token_expires: { [Op.gt]: new Date() },
       },
     });
 
@@ -312,10 +323,19 @@ exports.resetPassword = async (req, res) => {
       reset_token_expires: null,
     });
 
-    // Update password reset request
+    // Update password reset request (tanpa req.user.id karena user belum login)
     await PasswordResetRequest.update(
-      { is_processed: true, processed_by: req.user.id, processed_at: new Date() },
-      { where: { user_id: user.id, is_processed: false } }
+      {
+        is_processed: true,
+        processed_by: user.id,
+        processed_at: new Date(),
+      },
+      {
+        where: {
+          user_id: user.id,
+          is_processed: false,
+        },
+      }
     );
 
     res.json({ message: 'Password reset successfully' });

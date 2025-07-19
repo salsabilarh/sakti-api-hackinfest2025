@@ -45,7 +45,7 @@ exports.getAllServices = async (req, res) => {
         {
           model: Portfolio,
           as: 'portfolio',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: SubPortfolio,
@@ -55,7 +55,7 @@ exports.getAllServices = async (req, res) => {
         {
           model: Unit,
           as: 'sbu_owner',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: Sector,
@@ -83,7 +83,7 @@ exports.getServiceById = async (req, res) => {
         {
           model: Portfolio,
           as: 'portfolio',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: SubPortfolio,
@@ -93,7 +93,7 @@ exports.getServiceById = async (req, res) => {
         {
           model: Unit,
           as: 'sbu_owner',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: Sector,
@@ -175,7 +175,7 @@ exports.createService = async (req, res) => {
         {
           model: Portfolio,
           as: 'portfolio',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: SubPortfolio,
@@ -185,7 +185,7 @@ exports.createService = async (req, res) => {
         {
           model: Unit,
           as: 'sbu_owner',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: Sector,
@@ -260,7 +260,7 @@ exports.updateService = async (req, res) => {
         {
           model: Portfolio,
           as: 'portfolio',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: SubPortfolio,
@@ -270,7 +270,7 @@ exports.updateService = async (req, res) => {
         {
           model: Unit,
           as: 'sbu_owner',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name'],
         },
         {
           model: Sector,

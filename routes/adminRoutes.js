@@ -21,8 +21,8 @@ router.get(
 );
 router.post(
   '/',
-//   authMiddleware.authenticate,
-//   authMiddleware.authorize('admin'),
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
   adminController.createUser
 );
 router.put(
@@ -47,8 +47,8 @@ router.get(
 );
 router.post(
   '/waiting-users/:id/approve',
-//   authMiddleware.authenticate,
-//   authMiddleware.authorize('admin'),
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
   adminController.approveUser
 );
 router.post(

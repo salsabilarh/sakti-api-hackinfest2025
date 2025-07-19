@@ -194,10 +194,10 @@ exports.rejectUser = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Hapus user
-    await user.destroy();
+    // Reject user
+    await user.update({ is_verified: false });
 
-    res.json({ message: 'User rejected and deleted successfully' });
+    res.json({ message: 'User rejected successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to reject user' });
