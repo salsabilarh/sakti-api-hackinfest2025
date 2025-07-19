@@ -15,7 +15,7 @@ sequelize.authenticate()
   .catch(err => console.error('Database connection error:', err));
 
 const app = express();
-// app.set('trust proxy', true);
+app.set('trust proxy', true);
 
 // Rate limiting
 const limiter = rateLimit({
