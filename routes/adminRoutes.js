@@ -14,25 +14,25 @@ router.get(
 
 // User management (admin only)
 router.get(
-  '/',
+  '/users',
   authMiddleware.authenticate,
   authMiddleware.authorize('admin'),
   adminController.getAllUsers
 );
 router.post(
-  '/',
+  '/users',
   authMiddleware.authenticate,
   authMiddleware.authorize('admin'),
   adminController.createUser
 );
 router.put(
-  '/:id',
+  '/users/:id',
   authMiddleware.authenticate,
   authMiddleware.authorize('admin'),
   adminController.updateUser
 );
 router.delete(
-  '/:id',
+  '/users/:id',
   authMiddleware.authenticate,
   authMiddleware.authorize('admin'),
   adminController.deleteUser

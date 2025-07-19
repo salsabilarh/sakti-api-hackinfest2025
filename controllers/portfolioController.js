@@ -66,7 +66,7 @@ exports.createPortfolio = async (req, res) => {
 exports.updatePortfolio = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code } = req.body;
+    const { name } = req.body;
 
     // Cari portfolio berdasarkan ID
     const portfolio = await Portfolio.findByPk(id);
@@ -76,8 +76,7 @@ exports.updatePortfolio = async (req, res) => {
 
     // Update data portfolio
     await portfolio.update({
-      name: name || portfolio.name,
-      code: code || portfolio.code,
+      name: name || portfolio.name
     });
 
     res.json({ portfolio });
