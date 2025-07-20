@@ -66,8 +66,15 @@ exports.getAllUsers = async (req, res) => {
     }
 
     // Filter berdasarkan verifikasi
-    if (verified) {
-      where.is_verified = verified !== 'null';
+    if (verified !== undefined) {
+      if (verified === 'true') {
+        where.is_verified = true;
+      } else if (verified === 'false') {
+        where.is_verified = false;
+      }
+    } else {
+      // Tampilkan hanya user yang sudah diverifikasi atau ditolak (tidak null)
+      where.is_verified = { [Op.ne]: null };
     }
 
     // Filter berdasarkan unit kerja
