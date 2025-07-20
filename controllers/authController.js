@@ -21,15 +21,25 @@ function isStrongPassword(password) {
 
 exports.register = async (req, res) => {
   try {
-    const { full_name, email, password, unit_kerja_id, role } = req.body;
+    const { full_name, email, password, confirm_password, unit_kerja_id, role } = req.body;
 
-    if (!full_name || !email || !password || !role) {
-      return res.status(400).json({ 
+    // Validasi field wajib
+    if (!full_name || !email || !password || !confirm_password || !role) {
+      return res.status(400).json({
         success: false,
-        message: 'Name, email, password, and role are required' 
+        message: 'Nama lengkap, email, password, konfirmasi password, dan role wajib diisi'
       });
     }
 
+    // Validasi kecocokan password
+    if (password !== confirm_password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Konfirmasi password tidak cocok'
+      });
+    }
+
+    // Validasi kekuatan password
     if (!isStrongPassword(password)) {
       return res.status(400).json({
         success: false,
@@ -37,21 +47,24 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Cegah pendaftaran role Admin
     if (role === 'Admin') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'Admin registration is not allowed' 
+        message: 'Pendaftaran akun dengan role Admin tidak diizinkan'
       });
     }
 
+    // Cek apakah email sudah terdaftar
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Email sudah terdaftar' 
+        message: 'Email sudah terdaftar'
       });
     }
 
+    // Validasi unit kerja jika ada
     if (unit_kerja_id) {
       const unitExists = await Unit.findByPk(unit_kerja_id);
       if (!unitExists) {
@@ -62,8 +75,10 @@ exports.register = async (req, res) => {
       }
     }
 
+    // Hash password
     const hashedPassword = await argon2.hash(password);
 
+    // Simpan user baru
     const newUser = await User.create({
       full_name,
       email,
@@ -91,7 +106,7 @@ exports.register = async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Registrasi gagal',
       error: process.env.NODE_ENV === 'development' ? error.message : null
@@ -302,23 +317,29 @@ exports.forgotPassword = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, new_password } = req.body;
+    const { token, new_password, confirm_password } = req.body;
 
-    if (!token || !new_password) {
-      return res.status(400).json({ error: 'Token dan password baru wajib diisi' });
+    // Validasi input
+    if (!token || !new_password || !confirm_password) {
+      return res.status(400).json({ error: 'Token, password baru, dan konfirmasi password wajib diisi' });
     }
 
-    // Validasi kekuatan password baru
+    // Cek password dan konfirmasi
+    if (new_password !== confirm_password) {
+      return res.status(400).json({ error: 'Konfirmasi password tidak cocok' });
+    }
+
+    // Validasi kekuatan password
     if (!isStrongPassword(new_password)) {
       return res.status(400).json({
         error: 'Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol'
       });
     }
 
-    // Verifikasi token JWT
+    // Verifikasi JWT token reset
     const decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
 
-    // Cari user berdasarkan ID dari token dan token masih valid
+    // Cari user yang sesuai token & belum expired
     const user = await User.findOne({
       where: {
         id: decoded.id,
@@ -331,17 +352,15 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ error: 'Token tidak valid atau sudah kedaluwarsa' });
     }
 
-    // Hash password baru
+    // Hash dan simpan password baru
     const hashedPassword = await argon2.hash(new_password);
-
-    // Update password & hapus token reset
     await user.update({
       password: hashedPassword,
       reset_token: null,
       reset_token_expires: null,
     });
 
-    // Tandai permintaan reset sudah diproses
+    // Update status permintaan reset
     await PasswordResetRequest.update(
       {
         is_processed: true,
