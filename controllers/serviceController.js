@@ -22,7 +22,7 @@ exports.getAllServices = async (req, res) => {
         model: Portfolio,
         as: 'portfolio',
         where: { id: portfolio },
-        attributes: [],
+        attributes: ['name'],
       });
     }
 
@@ -33,7 +33,7 @@ exports.getAllServices = async (req, res) => {
         as: 'sectors',
         where: { id: sector },
         attributes: [],
-        through: { attributes: [] },
+        through: { attributes: ['code'] },
       });
     }
 
@@ -50,21 +50,16 @@ exports.getAllServices = async (req, res) => {
         {
           model: SubPortfolio,
           as: 'sub_portfolio',
-          attributes: ['id', 'name', 'code'],
-        },
-        {
-          model: Unit,
-          as: 'sbu_owner',
-          attributes: ['id', 'name'],
+          attributes: ['id', 'code'],
         },
         {
           model: Sector,
           as: 'sectors',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'code'],
           through: { attributes: [] },
         },
       ],
-      attributes: ['id', 'name', 'code', 'group', 'created_at'],
+      attributes: ['id', 'name', 'code', 'created_at'],
     });
 
     res.json({ services });
