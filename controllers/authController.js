@@ -304,10 +304,21 @@ exports.resetPassword = async (req, res) => {
   try {
     const { token, new_password } = req.body;
 
-    // Verifikasi token
+    if (!token || !new_password) {
+      return res.status(400).json({ error: 'Token dan password baru wajib diisi' });
+    }
+
+    // Validasi kekuatan password baru
+    if (!isStrongPassword(new_password)) {
+      return res.status(400).json({
+        error: 'Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol'
+      });
+    }
+
+    // Verifikasi token JWT
     const decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
 
-    // Cari user berdasarkan ID dari token
+    // Cari user berdasarkan ID dari token dan token masih valid
     const user = await User.findOne({
       where: {
         id: decoded.id,
@@ -317,20 +328,20 @@ exports.resetPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired token' });
+      return res.status(400).json({ error: 'Token tidak valid atau sudah kedaluwarsa' });
     }
 
     // Hash password baru
     const hashedPassword = await argon2.hash(new_password);
 
-    // Update password dan hapus token
+    // Update password & hapus token reset
     await user.update({
       password: hashedPassword,
       reset_token: null,
       reset_token_expires: null,
     });
 
-    // Update password reset request (tanpa req.user.id karena user belum login)
+    // Tandai permintaan reset sudah diproses
     await PasswordResetRequest.update(
       {
         is_processed: true,
@@ -345,16 +356,20 @@ exports.resetPassword = async (req, res) => {
       }
     );
 
-    res.json({ message: 'Password reset successfully' });
+    res.json({ message: 'Password berhasil di-reset' });
+
   } catch (error) {
     console.error(error);
+
     if (error.name === 'JsonWebTokenError') {
-      return res.status(400).json({ error: 'Invalid token' });
+      return res.status(400).json({ error: 'Token tidak valid' });
     }
+
     if (error.name === 'TokenExpiredError') {
-      return res.status(400).json({ error: 'Token expired' });
+      return res.status(400).json({ error: 'Token sudah kedaluwarsa' });
     }
-    res.status(500).json({ error: 'Failed to reset password' });
+
+    res.status(500).json({ error: 'Gagal me-reset password' });
   }
 };
 
