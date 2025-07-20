@@ -73,8 +73,8 @@ router.post(
 );
 
 // Unit Change
-router.get('/unit-change-requests', authenticate, adminController.getUnitChangeRequests);
-router.put('/unit-change-requests/:request_id/process', authenticate, adminController.processUnitChangeRequest);
+router.get('/unit-change-requests', authMiddleware.authenticate, authMiddleware.authorize('admin'), adminController.getUnitChangeRequests);
+router.put('/unit-change-requests/:request_id/process', authMiddleware.authenticate, authMiddleware.authorize('admin'), adminController.processUnitChangeRequest);
 
 // Download logs (admin only)
 router.get(
