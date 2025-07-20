@@ -67,7 +67,7 @@ exports.getAllUsers = async (req, res) => {
 
     // Filter berdasarkan verifikasi
     if (verified) {
-      where.is_verified = verified === 'verified';
+      where.is_verified = verified !== 'null';
     }
 
     // Filter berdasarkan unit kerja
