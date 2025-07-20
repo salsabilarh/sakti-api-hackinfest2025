@@ -72,6 +72,10 @@ router.post(
   adminController.resetUserPassword
 );
 
+// Unit Change
+router.get('/unit-change-requests', authMiddleware, authController.getUnitChangeRequests);
+router.put('/unit-change-requests/:request_id/process', authMiddleware, authController.processUnitChangeRequest);
+
 // Download logs (admin only)
 router.get(
   '/download-logs',

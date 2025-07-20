@@ -287,6 +287,169 @@ exports.resetUserPassword = async (req, res) => {
   }
 };
 
+
+exports.getUnitChangeRequests = async (req, res) => {
+  try {
+    // Hanya admin yang bisa mengakses
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Akses ditolak. Hanya admin yang dapat melihat permintaan perubahan unit'
+      });
+    }
+
+    // Dapatkan semua permintaan dengan status pending
+    const requests = await UnitChangeRequest.findAll({
+      where: { status: 'pending' },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'full_name', 'email']
+        },
+        {
+          model: Unit,
+          as: 'currentUnit',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Unit,
+          as: 'requestedUnit',
+          attributes: ['id', 'name']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      message: 'Daftar permintaan perubahan unit',
+      data: requests.map(request => ({
+        id: request.id,
+        user: {
+          id: request.user.id,
+          name: request.user.full_name,
+          email: request.user.email
+        },
+        current_unit: request.currentUnit ? {
+          id: request.currentUnit.id,
+          name: request.currentUnit.name
+        } : null,
+        requested_unit: {
+          id: request.requestedUnit.id,
+          name: request.requestedUnit.name
+        },
+        created_at: request.created_at,
+        status: request.status
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error in getUnitChangeRequests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mendapatkan daftar permintaan perubahan unit',
+      error: process.env.NODE_ENV === 'development' ? error.message : null
+    });
+  }
+};
+
+exports.processUnitChangeRequest = async (req, res) => {
+  try {
+    // Hanya admin yang bisa mengakses
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Akses ditolak. Hanya admin yang dapat memproses permintaan perubahan unit'
+      });
+    }
+
+    const { request_id } = req.params;
+    const { action, admin_notes } = req.body;
+
+    // Validasi input
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Action harus berupa "approve" atau "reject"'
+      });
+    }
+
+    // Temukan permintaan
+    const request = await UnitChangeRequest.findByPk(request_id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id']
+        }
+      ]
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: 'Permintaan perubahan unit tidak ditemukan'
+      });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Permintaan ini sudah diproses sebelumnya'
+      });
+    }
+
+    // Proses permintaan
+    if (action === 'approve') {
+      // Update unit user
+      await User.update(
+        { unit_id: request.requested_unit_id },
+        { where: { id: request.user.id } }
+      );
+
+      // Update status permintaan
+      await request.update({
+        status: 'approved',
+        admin_notes: admin_notes || null
+      });
+
+      res.json({
+        success: true,
+        message: 'Permintaan perubahan unit disetujui',
+        data: {
+          request_id: request.id,
+          new_unit_id: request.requested_unit_id,
+          user_id: request.user.id
+        }
+      });
+    } else {
+      // Reject request
+      await request.update({
+        status: 'rejected',
+        admin_notes: admin_notes || null
+      });
+
+      res.json({
+        success: true,
+        message: 'Permintaan perubahan unit ditolak',
+        data: {
+          request_id: request.id,
+          user_id: request.user.id
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error('Error in processUnitChangeRequest:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal memproses permintaan perubahan unit',
+      error: process.env.NODE_ENV === 'development' ? error.message : null
+    });
+  }
+};
+
 exports.getDownloadLogs = async (req, res) => {
   try {
     const { search, page = 1, limit = 10 } = req.query;

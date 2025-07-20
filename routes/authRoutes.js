@@ -10,4 +10,6 @@ router.put('/update-password', authenticate, authController.updatePassword);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 
+// Unit Change Requests
+router.post('/unit-change-request', authMiddleware, authController.requestUnitChange);
 module.exports = router;

@@ -350,3 +350,88 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ error: 'Failed to reset password' });
   }
 };
+
+exports.requestUnitChange = async (req, res) => {
+  try {
+    const { requested_unit_id } = req.body;
+    const userId = req.user.id;
+
+    // Validasi input
+    if (!requested_unit_id) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Unit tujuan harus dipilih' 
+      });
+    }
+
+    // Dapatkan user dengan unit saat ini
+    const user = await User.findByPk(userId, {
+      include: [{
+        model: Unit,
+        as: 'unit',
+        attributes: ['id']
+      }]
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User tidak ditemukan'
+      });
+    }
+
+    // Periksa apakah unit yang diminta sama dengan unit saat ini
+    if (user.unit && user.unit.id === requested_unit_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Anda sudah berada di unit ini'
+      });
+    }
+
+    // Periksa apakah unit yang diminta ada
+    const requestedUnit = await Unit.findByPk(requested_unit_id);
+    if (!requestedUnit) {
+      return res.status(404).json({
+        success: false,
+        message: 'Unit yang diminta tidak ditemukan'
+      });
+    }
+
+    // Periksa apakah sudah ada permintaan yang pending
+    const existingRequest = await UnitChangeRequest.findOne({
+      where: {
+        user_id: userId,
+        status: 'pending'
+      }
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: 'Anda sudah memiliki permintaan perubahan unit yang sedang diproses'
+      });
+    }
+
+    // Buat permintaan perubahan unit
+    const unitChangeRequest = await UnitChangeRequest.create({
+      user_id: userId,
+      current_unit_id: user.unit ? user.unit.id : null,
+      requested_unit_id: requested_unit_id,
+      status: 'pending'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Permintaan perubahan unit berhasil diajukan',
+      data: unitChangeRequest
+    });
+
+  } catch (error) {
+    console.error('Error in requestUnitChange:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengajukan permintaan perubahan unit',
+      error: process.env.NODE_ENV === 'development' ? error.message : null
+    });
+  }
+};
