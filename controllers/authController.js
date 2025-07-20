@@ -18,7 +18,6 @@ exports.register = async (req, res) => {
   try {
     const { full_name, email, password, unit_kerja_id, role } = req.body;
 
-    // Validation
     if (!full_name || !email || !password || !role) {
       return res.status(400).json({ 
         success: false,
@@ -26,7 +25,13 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Prevent self-registration as admin
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password minimal 8 karakter'
+      });
+    }
+
     if (role === 'Admin') {
       return res.status(403).json({ 
         success: false,
@@ -34,7 +39,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ 
@@ -43,7 +47,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Validate unit if provided
     if (unit_kerja_id) {
       const unitExists = await Unit.findByPk(unit_kerja_id);
       if (!unitExists) {
@@ -54,21 +57,18 @@ exports.register = async (req, res) => {
       }
     }
 
-    // Hash password
     const hashedPassword = await argon2.hash(password);
 
-    // Create unverified user
     const newUser = await User.create({
       full_name,
       email,
       password: hashedPassword,
       unit_kerja_id: unit_kerja_id || null,
       role,
-      is_verified: null, // Explicitly set to null
+      is_verified: null,
       is_active: true
     });
 
-    // Prepare response
     const userData = {
       id: newUser.id,
       name: newUser.full_name,
@@ -229,26 +229,24 @@ exports.updatePassword = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Cek apakah password lama tersedia
     if (!user.password || user.password.trim() === '') {
       return res.status(400).json({ error: 'Password lama tidak tersedia, tidak dapat diverifikasi' });
     }
 
-    // Verifikasi password lama
     const isPasswordValid = await argon2.verify(user.password, current_password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Password lama salah' });
     }
 
-    // Verifikasi konfirmasi password baru
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'Password baru minimal 8 karakter' });
+    }
+
     if (new_password !== confirm_password) {
       return res.status(400).json({ error: 'Konfirmasi password tidak cocok' });
     }
 
-    // Hash password baru
     const hashedPassword = await argon2.hash(new_password);
-
-    // Update password
     await user.update({ password: hashedPassword });
 
     res.json({ message: 'Password berhasil diperbarui' });
