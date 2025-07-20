@@ -221,7 +221,7 @@ exports.getProfile = async (req, res) => {
 
 exports.updatePassword = async (req, res) => {
   try {
-    const { current_password, new_password } = req.body;
+    const { current_password, new_password, confirm_password } = req.body;
 
     const user = await User.scope('withPassword').findByPk(req.user.id);
 
@@ -238,6 +238,11 @@ exports.updatePassword = async (req, res) => {
     const isPasswordValid = await argon2.verify(user.password, current_password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Password lama salah' });
+    }
+
+    // Verifikasi konfirmasi password baru
+    if (new_password !== confirm_password) {
+      return res.status(400).json({ error: 'Konfirmasi password tidak cocok' });
     }
 
     // Hash password baru
