@@ -14,6 +14,11 @@ const generateToken = (userId, role) => {
   );
 };
 
+function isStrongPassword(password) {
+  const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+  return regex.test(password);
+}
+
 exports.register = async (req, res) => {
   try {
     const { full_name, email, password, unit_kerja_id, role } = req.body;
@@ -25,10 +30,10 @@ exports.register = async (req, res) => {
       });
     }
 
-    if (password.length < 8) {
+    if (!isStrongPassword(password)) {
       return res.status(400).json({
         success: false,
-        message: 'Password minimal 8 karakter'
+        message: 'Password harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol'
       });
     }
 
@@ -43,7 +48,7 @@ exports.register = async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ 
         success: false,
-        message: 'Email already registered' 
+        message: 'Email sudah terdaftar' 
       });
     }
 
@@ -52,7 +57,7 @@ exports.register = async (req, res) => {
       if (!unitExists) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid unit specified'
+          message: 'Unit kerja tidak valid'
         });
       }
     }
@@ -69,28 +74,26 @@ exports.register = async (req, res) => {
       is_active: true
     });
 
-    const userData = {
-      id: newUser.id,
-      name: newUser.full_name,
-      email: newUser.email,
-      role: newUser.role,
-      unit_kerja_id: newUser.unit_kerja_id,
-      is_verified: newUser.is_verified,
-      is_active: newUser.is_active,
-      created_at: newUser.created_at
-    };
-
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Please wait for admin verification.',
-      data: userData
+      message: 'Registrasi berhasil. Silakan tunggu verifikasi admin.',
+      data: {
+        id: newUser.id,
+        name: newUser.full_name,
+        email: newUser.email,
+        role: newUser.role,
+        unit_kerja_id: newUser.unit_kerja_id,
+        is_verified: newUser.is_verified,
+        is_active: newUser.is_active,
+        created_at: newUser.created_at
+      }
     });
 
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ 
       success: false,
-      message: 'Registration failed',
+      message: 'Registrasi gagal',
       error: process.env.NODE_ENV === 'development' ? error.message : null
     });
   }
@@ -224,7 +227,6 @@ exports.updatePassword = async (req, res) => {
     const { current_password, new_password, confirm_password } = req.body;
 
     const user = await User.scope('withPassword').findByPk(req.user.id);
-
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -238,12 +240,14 @@ exports.updatePassword = async (req, res) => {
       return res.status(401).json({ error: 'Password lama salah' });
     }
 
-    if (new_password.length < 8) {
-      return res.status(400).json({ error: 'Password baru minimal 8 karakter' });
-    }
-
     if (new_password !== confirm_password) {
       return res.status(400).json({ error: 'Konfirmasi password tidak cocok' });
+    }
+
+    if (!isStrongPassword(new_password)) {
+      return res.status(400).json({
+        error: 'Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol'
+      });
     }
 
     const hashedPassword = await argon2.hash(new_password);
