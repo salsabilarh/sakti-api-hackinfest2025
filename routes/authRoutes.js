@@ -11,5 +11,5 @@ router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 
 // Unit Change Requests
-router.post('/unit-change-request', authMiddleware, authController.requestUnitChange);
+router.post('/unit-change-request', authenticate, authController.requestUnitChange);
 module.exports = router;
