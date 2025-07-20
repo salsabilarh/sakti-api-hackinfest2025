@@ -1,5 +1,5 @@
 // controllers/adminController.js
-const { User, PasswordResetRequest, DownloadLog, UnitChangeRequest, MarketingKit } = require('../models');
+const { User, PasswordResetRequest, DownloadLog, Unit, UnitChangeRequest, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
 const argon2 = require('argon2');
 
