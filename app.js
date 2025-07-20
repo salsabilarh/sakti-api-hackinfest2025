@@ -25,7 +25,13 @@ const limiter = rateLimit({
 });
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: ['http://localhost:5173'], // tambahkan domain frontend kamu
+  credentials: true, // jika kamu pakai cookie / auth header
+};
+
+app.use(cors(corsOptions));
+
 app.use(helmet());
 app.use(limiter);
 app.use(logger('dev'));
