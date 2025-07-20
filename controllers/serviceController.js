@@ -8,7 +8,7 @@ exports.getAllServices = async (req, res) => {
     const where = {};
     const include = [];
 
-    // Filter berdasarkan search
+    // Filter search
     if (search) {
       where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
@@ -16,28 +16,28 @@ exports.getAllServices = async (req, res) => {
       ];
     }
 
-    // Filter berdasarkan portfolio
+    // Filter portfolio
     if (portfolio) {
       include.push({
         model: Portfolio,
         as: 'portfolio',
         where: { id: portfolio },
-        attributes: ['name'],
+        attributes: [], // hanya untuk filter
       });
     }
 
-    // Filter berdasarkan sector
+    // Filter sektor
     if (sector) {
       include.push({
         model: Sector,
         as: 'sectors',
         where: { id: sector },
         attributes: [],
-        through: { attributes: ['code'] },
+        through: { attributes: [] },
       });
     }
 
-    // Dapatkan services berdasarkan filter
+    // Ambil service dan relasi yang dibutuhkan
     const services = await Service.findAll({
       where,
       include: [
@@ -45,24 +45,34 @@ exports.getAllServices = async (req, res) => {
         {
           model: Portfolio,
           as: 'portfolio',
-          attributes: ['id', 'name'],
+          attributes: ['name'],
         },
         {
           model: SubPortfolio,
           as: 'sub_portfolio',
-          attributes: ['id', 'code'],
+          attributes: ['code'],
         },
         {
           model: Sector,
           as: 'sectors',
-          attributes: ['id', 'code'],
+          attributes: ['code'],
           through: { attributes: [] },
         },
       ],
-      attributes: ['id', 'name', 'code', 'created_at'],
+      attributes: ['id', 'name', 'code'],
     });
 
-    res.json({ services });
+    // Format hasil sebelum kirim response
+    const formatted = services.map(service => ({
+      id: service.id,
+      name: service.name,
+      code: service.code,
+      portfolio: service.portfolio?.name || null,
+      subPortfolio: service.sub_portfolio?.code || null,
+      sectors: service.sectors.map(sector => sector.code),
+    }));
+
+    res.json({ services: formatted });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to get services' });
