@@ -1,7 +1,7 @@
 // controllers/authController.js
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
-const { User, Unit, PasswordResetRequest } = require('../models');
+const { User, Unit, PasswordResetRequest, UnitChangeRequest } = require('../models');
 const { Op } = require('sequelize');
 // const { sendResetPasswordEmail } = require('../utils/email');
 
