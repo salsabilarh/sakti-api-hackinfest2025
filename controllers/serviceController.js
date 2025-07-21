@@ -40,8 +40,7 @@ exports.getAllServices = async (req, res) => {
     const total = await Service.count({
       where,
       include,
-      distinct: true,
-      col: 'Service.id',
+      distinct: true
     });
 
     // Ambil data layanan
