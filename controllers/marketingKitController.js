@@ -10,7 +10,27 @@ exports.getAllMarketingKits = async (req, res) => {
     const where = {};
     const include = [];
 
-    // Filter berdasarkan search
+    // Always include service
+    const serviceInclude = {
+      model: Service,
+      as: 'service',
+      attributes: ['id', 'name', 'code'],
+    };
+
+    if (service) {
+      serviceInclude.where = { id: service };
+    }
+
+    include.push(serviceInclude);
+
+    // Include uploader
+    include.push({
+      model: User,
+      as: 'uploader',
+      attributes: ['id', 'full_name', 'email'],
+    });
+
+    // Search
     if (search) {
       where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
@@ -18,37 +38,14 @@ exports.getAllMarketingKits = async (req, res) => {
       ];
     }
 
-    // Filter berdasarkan service
-    if (service) {
-      include.push({
-        model: Service,
-        as: 'service',
-        where: { id: service },
-        attributes: [],
-      });
-    }
-
-    // Filter berdasarkan file_type
+    // File type
     if (file_type) {
       where.file_type = file_type;
     }
 
-    // Dapatkan marketing kits berdasarkan filter
     const marketingKits = await MarketingKit.findAll({
       where,
-      include: [
-        ...include,
-        {
-          model: Service,
-          as: 'service',
-          attributes: ['id', 'name', 'code'],
-        },
-        {
-          model: User,
-          as: 'uploader',
-          attributes: ['id', 'full_name', 'email'],
-        },
-      ],
+      include,
       order: [['created_at', 'DESC']],
     });
 
