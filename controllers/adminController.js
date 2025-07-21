@@ -365,8 +365,8 @@ exports.getUnitChangeRequests = async (req, res) => {
           id: request.requestedUnit.id,
           name: request.requestedUnit.name
         },
-        created_at: request.created_at,
-        status: request.status
+        status: request.status,
+        created_at: request.created_at
       })),
       pagination: {
         total: count,
