@@ -319,8 +319,11 @@ exports.getUnitChangeRequests = async (req, res) => {
       });
     }
 
-    // Dapatkan semua permintaan dengan status pending
-    const requests = await UnitChangeRequest.findAll({
+    const limit = parseInt(req.query.limit) || 5;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * limit;
+
+    const { count, rows: requests } = await UnitChangeRequest.findAndCountAll({
       where: { status: 'pending' },
       include: [
         {
@@ -339,7 +342,9 @@ exports.getUnitChangeRequests = async (req, res) => {
           attributes: ['id', 'name']
         }
       ],
-      order: [['created_at', 'DESC']]
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
     });
 
     res.json({
@@ -362,7 +367,12 @@ exports.getUnitChangeRequests = async (req, res) => {
         },
         created_at: request.created_at,
         status: request.status
-      }))
+      })),
+      pagination: {
+        total: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+      }
     });
 
   } catch (error) {
