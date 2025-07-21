@@ -588,7 +588,7 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, full_name, unit_kerja_id, role, is_active } = req.body;
+    const { email, full_name, unit_kerja_id, role, is_active, is_verified } = req.body;
 
     // Cari user berdasarkan ID
     const user = await User.findByPk(id);
@@ -603,6 +603,7 @@ exports.updateUser = async (req, res) => {
       unit_kerja_id: unit_kerja_id || user.unit_kerja_id,
       role: role || user.role,
       is_active: is_active !== undefined ? is_active : user.is_active,
+      is_verified: is_verified !== undefined ? is_verified : user.is_verified
     });
 
     res.json({
@@ -614,6 +615,7 @@ exports.updateUser = async (req, res) => {
         role: user.role,
         unit_kerja_id: user.unit_kerja_id,
         is_active: user.is_active,
+        is_verified: user.is_verified
       },
     });
   } catch (error) {
