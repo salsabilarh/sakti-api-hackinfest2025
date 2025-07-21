@@ -114,7 +114,7 @@ exports.getAllUsers = async (req, res) => {
       where,
       include: [
         {
-          model: UnitKerja,
+          model: Unit,
           as: "unit",
           attributes: ["id", "name"],
         },
@@ -144,8 +144,8 @@ exports.getAllUsers = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Error getAllUsers:", error);
-    return res.status(500).json({ error: "Failed to get users" });
+    console.error("Error getAllUsers:", error.message, error.stack);
+    return res.status(500).json({ error: error.message });
   }
 };
 
