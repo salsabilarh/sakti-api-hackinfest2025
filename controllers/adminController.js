@@ -1,4 +1,3 @@
-// controllers/adminController.js
 const { User, PasswordResetRequest, DownloadLog, Unit, UnitChangeRequest, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
 const argon2 = require('argon2');
@@ -57,11 +56,22 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getAllUsers = async (req, res) => {
   try {
-    const { search, role, unit, status, verified, page = 1, limit = 10 } = req.query;
+    const {
+      search,
+      role,
+      unit,
+      status,
+      verified,
+      sort = "full_name",
+      direction = "ASC",
+      page = 1,
+      limit = 10,
+    } = req.query;
+
     const where = {};
     const include = [];
 
-    // Filter berdasarkan search
+    // 🔍 Pencarian nama / email
     if (search) {
       where[Op.or] = [
         { full_name: { [Op.like]: `%${search}%` } },
@@ -69,69 +79,62 @@ exports.getAllUsers = async (req, res) => {
       ];
     }
 
-    // Filter berdasarkan role
+    // 🎯 Filter Role
     if (role) {
       where.role = role;
     }
 
-    // Filter berdasarkan status aktif
+    // ✅ Filter status aktif
     if (status) {
-      where.is_active = status === 'active';
+      where.is_active = status.toLowerCase() === "active";
     }
 
-    // Filter berdasarkan verifikasi
+    // ✅ Filter status verifikasi
     if (verified !== undefined) {
-      if (verified === 'true') {
+      if (verified === "true") {
         where.is_verified = true;
-      } else if (verified === 'false') {
+      } else if (verified === "false") {
         where.is_verified = false;
       }
     } else {
-      // Tampilkan hanya user yang sudah diverifikasi atau ditolak (tidak null)
+      // Default: hanya user yang status verifikasi tidak null
       where.is_verified = { [Op.ne]: null };
     }
 
-    // Filter berdasarkan unit kerja
+    // 🏢 Filter unit kerja (berdasarkan ID unit)
     if (unit) {
-      include.push({
-        association: 'unit',
-        where: { id: unit },
-        attributes: [],
-      });
+      where.unit_kerja_id = unit;
     }
 
-    // Hitung total data
-    const total = await User.count({
-      where,
-      include,
-    });
+    // 🔢 Hitung total
+    const total = await User.count({ where });
 
-    // Dapatkan data user dengan pagination
+    // 🗂 Ambil data user dengan relasi
     const users = await User.findAll({
       where,
       include: [
-        ...include,
         {
-          association: 'unit',
-          attributes: ['id', 'name'],
+          model: UnitKerja,
+          as: "unit",
+          attributes: ["id", "name"],
         },
       ],
       attributes: [
-        'id',
-        'full_name',
-        'email',
-        'role',
-        'is_active',
-        'is_verified',
-        'last_login',
-        'created_at',
+        "id",
+        "full_name",
+        "email",
+        "role",
+        "is_active",
+        "is_verified",
+        "last_login",
+        "created_at",
       ],
-      order: [['full_name', 'ASC']],
+      order: [[sort, direction.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
     });
 
-    res.json({
+    return res.json({
       users,
       pagination: {
         total,
@@ -141,8 +144,8 @@ exports.getAllUsers = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to get users' });
+    console.error("❌ Error getAllUsers:", error);
+    return res.status(500).json({ error: "Failed to get users" });
   }
 };
 

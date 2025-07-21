@@ -1,14 +1,13 @@
-// controllers/serviceController.js
 const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getAllServices = async (req, res) => {
   try {
-    const { search, portfolio, sector } = req.query;
+    const { search, portfolio, sector, page = 1, limit = 10 } = req.query;
     const where = {};
     const include = [];
 
-    // Filter search
+    // Filter pencarian
     if (search) {
       where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
@@ -22,7 +21,7 @@ exports.getAllServices = async (req, res) => {
         model: Portfolio,
         as: 'portfolio',
         where: { id: portfolio },
-        attributes: [], // hanya untuk filter
+        attributes: [],
       });
     }
 
@@ -37,7 +36,15 @@ exports.getAllServices = async (req, res) => {
       });
     }
 
-    // Ambil service dan relasi yang dibutuhkan
+    // Hitung total data tanpa limit
+    const total = await Service.count({
+      where,
+      include,
+      distinct: true,
+      col: 'Service.id',
+    });
+
+    // Ambil data layanan
     const services = await Service.findAll({
       where,
       include: [
@@ -59,10 +66,12 @@ exports.getAllServices = async (req, res) => {
           through: { attributes: [] },
         },
       ],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
       attributes: ['id', 'name', 'code'],
     });
 
-    // Format hasil sebelum kirim response
+    // Format data
     const formatted = services.map(service => ({
       id: service.id,
       name: service.name,
@@ -72,7 +81,12 @@ exports.getAllServices = async (req, res) => {
       sectors: service.sectors.map(sector => sector.code),
     }));
 
-    res.json({ services: formatted });
+    res.json({
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      services: formatted,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to get services' });
