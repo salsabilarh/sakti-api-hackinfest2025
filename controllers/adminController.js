@@ -15,11 +15,12 @@ exports.getDashboardStats = async (req, res) => {
       where: { is_verified: null },
     });
 
+    // Hitung total permintaan ganti unit yang pending
     const totalPendingUnitChangeRequests = await UnitChangeRequest.count({
       where: { status: 'pending' },
     });
 
-    // Hitung total user yang aktif login (dalam 30 hari terakhir)
+    // Hitung total user aktif dalam 30 hari terakhir
     const totalActiveUsers = await User.count({
       where: {
         last_login: {
@@ -31,13 +32,21 @@ exports.getDashboardStats = async (req, res) => {
     // Hitung total download
     const totalDownloads = await DownloadLog.count();
 
+    // Hitung total permintaan reset password yang belum diproses
+    const totalPasswordResetRequests = await PasswordResetRequest.count({
+      where: {
+        is_processed: false, // sesuaikan nama field dan kondisi
+      },
+    });
+
     res.json({
       stats: {
         total_users: totalUsers,
         total_waiting_users: totalWaitingUsers,
         total_active_users: totalActiveUsers,
         total_downloads: totalDownloads,
-        total_pending_unit_change_requests: totalPendingUnitChangeRequests, 
+        total_pending_unit_change_requests: totalPendingUnitChangeRequests,
+        total_password_reset_requests: totalPasswordResetRequests, // <--- ditambahkan
       },
     });
   } catch (error) {
