@@ -410,10 +410,10 @@ exports.processUnitChangeRequest = async (req, res) => {
     // Proses permintaan
     if (action === 'approve') {
       // Update unit user
-      await User.update(
-        { unit_id: request.requested_unit_id },
-        { where: { id: request.user.id } }
-      );
+    await User.update(
+      { unit_kerja_id: request.requested_unit_id },
+      { where: { id: request.user.id } }
+    );
 
       // Update status permintaan
       await request.update({
