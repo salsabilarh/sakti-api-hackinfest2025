@@ -15,6 +15,10 @@ exports.getDashboardStats = async (req, res) => {
       where: { is_verified: null },
     });
 
+    const totalPendingUnitChangeRequests = await UnitChangeRequest.count({
+      where: { status: 'pending' },
+    });
+
     // Hitung total user yang aktif login (dalam 30 hari terakhir)
     const totalActiveUsers = await User.count({
       where: {
@@ -33,6 +37,7 @@ exports.getDashboardStats = async (req, res) => {
         total_waiting_users: totalWaitingUsers,
         total_active_users: totalActiveUsers,
         total_downloads: totalDownloads,
+        total_pending_unit_change_requests: totalPendingUnitChangeRequests, 
       },
     });
   } catch (error) {
