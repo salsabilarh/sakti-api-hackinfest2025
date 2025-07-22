@@ -18,6 +18,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(20),
       allowNull: false,
     },
+    cloudinary_public_id: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
   }, {
     tableName: 'marketing_kits',
     timestamps: true,

@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const marketingKitController = require('../controllers/marketingKitController');
 const authMiddleware = require('../middlewares/authMiddleware');
-const uploadMiddleware = require('../middlewares/uploadMiddleware');
+const uploadMiddleware = require('../middlewares/uploadCloudinary');
 
 // Public routes (viewer, pdo, management access)
 router.get('/', authMiddleware.authenticate, marketingKitController.getAllMarketingKits);
@@ -22,7 +22,7 @@ router.post(
   authMiddleware.authenticate,
   authMiddleware.authorize('admin', 'management'),
   uploadMiddleware.single('file'),
-  marketingKitController.uploadMarketingKit
+  marketingKitController.createMarketingKit
 );
 router.put(
   '/:id',
