@@ -1,5 +1,6 @@
 const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
+const xlsx = require('xlsx');
 
 exports.getAllServices = async (req, res) => {
   try {
@@ -141,6 +142,54 @@ exports.getServiceById = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to get service details' });
+  }
+};
+
+exports.importServices = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'File not provided' });
+    }
+
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(sheet);
+
+    const createdServices = [];
+
+    for (const row of data) {
+      const {
+        name,
+        code,
+        portfolio, // name
+        subPortfolio, // code
+        sectors // comma separated codes
+      } = row;
+
+      const portfolioRecord = await Portfolio.findOne({ where: { name: portfolio } });
+      const subPortfolioRecord = await SubPortfolio.findOne({ where: { code: subPortfolio } });
+
+      const service = await Service.create({
+        name,
+        code,
+        portfolio_id: portfolioRecord?.id || null,
+        sub_portfolio_id: subPortfolioRecord?.id || null,
+        created_by: req.user.id,
+      });
+
+      if (sectors) {
+        const sectorCodes = sectors.split(',').map(s => s.trim());
+        const sectorRecords = await Sector.findAll({ where: { code: sectorCodes } });
+        await service.addSectors(sectorRecords.map(s => s.id));
+      }
+
+      createdServices.push(service);
+    }
+
+    res.status(201).json({ message: 'Import berhasil', createdCount: createdServices.length });
+  } catch (error) {
+    console.error('Import error:', error);
+    res.status(500).json({ error: 'Import gagal' });
   }
 };
 
