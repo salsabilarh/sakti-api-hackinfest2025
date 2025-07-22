@@ -1,9 +1,14 @@
-// controllers/unitController.js
 const { Unit } = require('../models');
 
 exports.getAllUnits = async (req, res) => {
   try {
+    const where = {};
+    if (req.query.type) {
+      where.type = req.query.type;
+    }
+
     const units = await Unit.findAll({
+      where,
       attributes: ['id', 'name', 'type'],
       order: [['name', 'ASC']],
     });
