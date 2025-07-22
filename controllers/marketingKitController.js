@@ -116,6 +116,9 @@ exports.createMarketingKit = async (req, res) => {
       uploaded_by: req.user.id,
     });
 
+    console.log('req.body:', req.body);
+    console.log('req.file:', req.file);
+
     return res.status(201).json({
       message: 'Marketing kit uploaded successfully',
       data: newMarketingKit,
