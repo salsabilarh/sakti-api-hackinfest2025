@@ -99,7 +99,7 @@ exports.createMarketingKit = async (req, res) => {
     // Upload file ke Cloudinary
     const uploadResult = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
-      resource_type: 'auto',
+      resource_type: 'raw', // ⬅️ pastikan ini adalah 'raw'
     });
 
     // Hapus file lokal setelah upload
@@ -163,22 +163,20 @@ exports.downloadMarketingKit = async (req, res) => {
 
     const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
     const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
-    const originalFileName = path.basename(marketingKit.file_path);
-
-    const downloadFilename = marketingKit.name || originalFileName;
+    const downloadFilename = marketingKit.name || 'file';
 
     const signedUrl = cloudinary.utils.private_download_url(
-    sanitizedPublicId,
-    fileExtension,
-    {
-      resource_type: 'raw',
-      type: 'upload',
-      expires_at: Math.floor(Date.now() / 1000) + 60,
-      attachment: downloadFilename,
-    }
-  );
+      marketingKit.cloudinary_public_id, // ✅ gunakan public ID langsung
+      fileExtension,
+      {
+        resource_type: 'raw',
+        type: 'upload',
+        expires_at: Math.floor(Date.now() / 1000) + 60, // 1 menit
+        attachment: downloadFilename,
+      }
+    );
 
-  return res.redirect(signedUrl); // 302 otomatis
+    return res.redirect(signedUrl); // 302 otomatis
   } catch (error) {
     console.error('Download error:', error);
     return res.status(500).json({ error: 'Failed to download marketing kit' });
