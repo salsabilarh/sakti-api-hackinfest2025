@@ -3,7 +3,7 @@ const { MarketingKit, Service, User, DownloadLog } = require('../models');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
-const cloudinary = require('../config/cloudinary');
+const cloudinary = require('cloudinary').v2;
 
 exports.getAllMarketingKits = async (req, res) => {
   try {
@@ -145,18 +145,22 @@ exports.downloadMarketingKit = async (req, res) => {
       purpose,
     });
 
-    // Misal file_path = "folder/namafile.pdf" (public_id di Cloudinary)
+    // Ekstensi file, misalnya "pdf"
+    const fileExt = 'pdf';
+
+    // ⚠️ Gunakan public_id saja tanpa ekstensi
+    const publicIdWithoutExt = marketingKit.file_path.replace(/\.[^/.]+$/, '');
+
     const signedUrl = cloudinary.utils.private_download_url(
-      marketingKit.file_path, // public_id di Cloudinary
-      'pdf', // ekstensi
+      publicIdWithoutExt, // ← ini penting
+      fileExt,
       {
-        type: 'authenticated', // atau 'private' tergantung setup file
-        expires_at: Math.floor(Date.now() / 1000) + 60 // expired dalam 1 menit
+        type: 'authenticated', // atau 'private'
+        expires_at: Math.floor(Date.now() / 1000) + 60 // 1 menit
       }
     );
 
     return res.status(302).redirect(signedUrl);
-
   } catch (error) {
     console.error('Download error:', error);
     return res.status(500).json({ error: 'Failed to download marketing kit' });
