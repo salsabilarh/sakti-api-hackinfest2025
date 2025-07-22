@@ -14,7 +14,8 @@ router.post('/',
   upload.single('file'), 
   authMiddleware.authenticate,
   authMiddleware.authorize('admin', 'management'), 
-  createMarketingKit);
+  serviceController.createMarketingKit
+);
 router.put(
   '/:id',
   authMiddleware.authenticate,

@@ -107,8 +107,8 @@ exports.createMarketingKit = async (req, res) => {
 
     const newMarketingKit = await MarketingKit.create({
       name: file.originalname,
-      file_path: uploadResult.secure_url, // URL Cloudinary
-      cloudinary_public_id: uploadResult.public_id, // ID Cloudinary
+      file_path: uploadResult.secure_url,
+      cloudinary_public_id: uploadResult.public_id,
       file_type: req.body.file_type,
       service_id: req.body.service_id,
       uploaded_by: req.user.id,
