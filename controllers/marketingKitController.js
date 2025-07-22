@@ -96,10 +96,9 @@ exports.createMarketingKit = async (req, res) => {
     }
 
     // Upload ke Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(file.path, {
-      folder: 'marketing_kits',
+    const uploadResult = cloudinary.uploader.upload(filePath, {
+      public_id: 'marketing_kits/xchfw2ty4kl48cmkjxyo',
       resource_type: 'auto',
-      type:"authenticated"
     });
 
     // Hapus file lokal
@@ -165,17 +164,17 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(500).json({ error: 'Invalid file path format' });
     }
 
+    const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
+
     const signedUrl = cloudinary.utils.private_download_url(
-      publicIdWithoutExt,
+      sanitizedPublicId,
       'pdf',
       {
-        type: 'upload', // ganti 'authenticated' jadi 'upload'
-        expires_at: Math.floor(Date.now() / 1000) + 60
+        type: 'upload', // atau 'authenticated' jika kamu upload pakai itu
+        expires_at: Math.floor(Date.now() / 1000) + 60,
       }
     );
-    console.log('CLOUDINARY CONFIG:', cloudinary.config());
 
-    console.log('Generated signed URL:', signedUrl);
     return res.status(302).redirect(signedUrl);
   } catch (error) {
     console.error('Download error:', error);
