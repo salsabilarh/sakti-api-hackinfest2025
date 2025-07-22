@@ -161,7 +161,7 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(500).json({ error: 'Invalid file path format' });
     }
 
-    const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
+    // const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
     const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
     const downloadFilename = marketingKit.name || 'file';
 
@@ -194,25 +194,37 @@ exports.updateMarketingKit = async (req, res) => {
       return res.status(404).json({ error: 'Marketing kit not found' });
     }
 
-    // Jika ada file baru yang diupload
     if (file) {
-      // Hapus file lama jika ada dan dari local (bukan dari cloud URL)
-      if (marketingKit.file && fs.existsSync(marketingKit.file)) {
-        await unlinkFile(marketingKit.file);
+      // Hapus file lama dari Cloudinary
+      if (marketingKit.cloudinary_public_id) {
+        await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
       }
 
-      // Simpan path file baru (pastikan sudah diset via multer middleware)
-      marketingKit.file = file.path;
+      // Upload file baru ke Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(file.path, {
+        folder: 'marketing_kits',
+        resource_type: 'raw',
+      });
+
+      // Hapus file lokal
+      fs.unlink(file.path, (err) => {
+        if (err) console.warn('Failed to delete local file:', err);
+      });
+
+      marketingKit.file_path = uploadResult.secure_url;
+      marketingKit.cloudinary_public_id = uploadResult.public_id;
     }
 
-    // Update kolom lainnya
     marketingKit.name = name ?? marketingKit.name;
     marketingKit.file_type = file_type ?? marketingKit.file_type;
     marketingKit.service_id = service_id ?? marketingKit.service_id;
 
     await marketingKit.save();
 
-    res.json({ message: 'Marketing kit updated successfully', marketing_kit: marketingKit });
+    res.json({
+      message: 'Marketing kit updated successfully',
+      marketing_kit: marketingKit,
+    });
   } catch (error) {
     console.error('Update error:', error);
     res.status(500).json({ error: 'Failed to update marketing kit' });
