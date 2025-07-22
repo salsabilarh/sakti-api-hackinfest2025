@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
 const cloudinary = require('../config/cloudinary');
+const axios = require('axios');
 
 exports.getAllMarketingKits = async (req, res) => {
   try {
@@ -145,37 +146,27 @@ exports.downloadMarketingKit = async (req, res) => {
       purpose,
     });
 
-    // Ekstrak public_id jika file_path adalah URL
-    const getPublicId = (filePath) => {
-      try {
-        const url = new URL(filePath);
-        const parts = url.pathname.split('/');
-        const fileWithExt = parts.pop(); // "xchfw2ty4kl48cmkjxyo.pdf"
-        const fileNameOnly = fileWithExt.replace(/\.[^/.]+$/, ''); // remove extension
-        const folderPath = parts.slice(parts.indexOf('upload') + 1).join('/'); // e.g., "v1234/marketing_kits"
-        return `${folderPath}/${fileNameOnly}`; // result: "marketing_kits/xchfw2ty4kl48cmkjxyo"
-      } catch {
-        return null;
-      }
-    };
-
-    const publicIdWithoutExt = getPublicId(marketingKit.file_path);
-    if (!publicIdWithoutExt) {
-      return res.status(500).json({ error: 'Invalid file path format' });
-    }
-
     const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
 
     const signedUrl = cloudinary.utils.private_download_url(
       sanitizedPublicId,
       'pdf',
       {
-        type: 'upload', // atau 'authenticated' jika kamu upload pakai itu
+        type: 'upload',
         expires_at: Math.floor(Date.now() / 1000) + 60,
       }
     );
 
-    return res.status(302).redirect(signedUrl);
+    const fileName = marketingKit.name || 'downloaded-file.pdf';
+
+    const response = await axios.get(signedUrl, {
+      responseType: 'stream',
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    response.data.pipe(res);
+
   } catch (error) {
     console.error('Download error:', error);
     return res.status(500).json({ error: 'Failed to download marketing kit' });
