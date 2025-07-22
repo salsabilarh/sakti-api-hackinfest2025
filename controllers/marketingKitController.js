@@ -99,7 +99,9 @@ exports.createMarketingKit = async (req, res) => {
     // Upload file ke Cloudinary
     const uploadResult = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
-      resource_type: 'auto',
+      resource_type: 'raw',
+      use_filename: true,
+      unique_filename: false,
     });
 
     // Hapus file lokal setelah upload
@@ -107,6 +109,7 @@ exports.createMarketingKit = async (req, res) => {
       if (err) console.warn('Failed to delete local file:', err);
     });
 
+    // Simpan ke database
     const newMarketingKit = await MarketingKit.create({
       name: file.originalname,
       file_path: uploadResult.secure_url,
@@ -116,9 +119,22 @@ exports.createMarketingKit = async (req, res) => {
       uploaded_by: req.user.id,
     });
 
+    // Generate signed private download URL
+    const downloadUrl = cloudinary.utils.private_download_url(
+      uploadResult.public_id,
+      uploadResult.format || 'pdf', // fallback ke PDF jika format tidak ada
+      {
+        resource_type: 'raw',
+        type: 'upload',
+        expires_at: Math.floor(Date.now() / 1000) + 60, // expired dalam 60 detik
+        attachment: file.originalname,
+      }
+    );
+
     return res.status(201).json({
       message: 'Marketing kit uploaded successfully',
-      data: newMarketingKit,
+      marketing_kit: newMarketingKit,
+      download_url: downloadUrl, // ✅ dikirim ke frontend
     });
   } catch (error) {
     console.error('Upload error:', error);
