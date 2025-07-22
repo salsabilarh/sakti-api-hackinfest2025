@@ -64,16 +64,19 @@ module.exports = (sequelize, DataTypes) => {
   // Hook untuk generate kode jasa otomatis
   Service.beforeCreate(async (service, options) => {
     if (!service.code) {
-      const subPortfolio = await service.getSub_portfolio();
+      const subPortfolio = await sequelize.models.SubPortfolio.findByPk(service.sub_portfolio_id);
+      if (!subPortfolio) {
+        throw new Error('Sub portfolio tidak ditemukan');
+      }
+
       const lastService = await Service.findOne({
         where: { sub_portfolio_id: service.sub_portfolio_id },
         order: [['created_at', 'DESC']],
       });
 
       let nextChar = 'A';
-      if (lastService) {
-        const lastCode = lastService.code;
-        const lastChar = lastCode.charAt(lastCode.length - 1);
+      if (lastService && lastService.code) {
+        const lastChar = lastService.code.charAt(lastService.code.length - 1);
         nextChar = String.fromCharCode(lastChar.charCodeAt(0) + 1);
       }
 
