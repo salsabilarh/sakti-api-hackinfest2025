@@ -159,16 +159,17 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(500).json({ error: 'Invalid file path format' });
     }
 
-    // const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
+    const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
     const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
     const originalFileName = path.basename(marketingKit.file_path);
 
     const downloadFilename = marketingKit.name || originalFileName;
 
     const signedUrl = cloudinary.utils.private_download_url(
-    marketingKit.cloudinary_public_id,
+    sanitizedPublicId,
     fileExtension,
     {
+      resource_type: 'raw',
       type: 'upload',
       expires_at: Math.floor(Date.now() / 1000) + 60,
       attachment: downloadFilename,
