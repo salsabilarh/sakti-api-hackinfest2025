@@ -178,12 +178,13 @@ exports.createService = async (req, res) => {
       created_by: req.user.id,
     });
 
-    // Tambahkan sectors dan sub_sectors jika ada
-    if (sectors && sectors.length > 0) {
+    // Validasi dan tambahkan relasi sektor
+    if (Array.isArray(sectors) && sectors.length > 0) {
       await service.addSectors(sectors);
     }
 
-    if (sub_sectors && sub_sectors.length > 0) {
+    // Validasi dan tambahkan relasi sub sektor
+    if (Array.isArray(sub_sectors) && sub_sectors.length > 0) {
       await service.addSub_sectors(sub_sectors);
     }
 
