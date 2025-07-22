@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
 const cloudinary = require('../config/cloudinary');
+const util = require('util');
+const unlinkFile = util.promisify(fs.unlink);
 
 exports.getAllMarketingKits = async (req, res) => {
   try {
@@ -186,17 +188,32 @@ exports.downloadMarketingKit = async (req, res) => {
 exports.updateMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, file_type } = req.body;
+    const { name, file_type, service_id } = req.body;
+    const file = req.file; // dari middleware upload single file
 
     const marketingKit = await MarketingKit.findByPk(id);
     if (!marketingKit) {
       return res.status(404).json({ error: 'Marketing kit not found' });
     }
 
-    await marketingKit.update({
-      name: name || marketingKit.name,
-      file_type: file_type || marketingKit.file_type,
-    });
+    // Jika ada file baru diupload
+    if (file) {
+      // Hapus file lama (jika dari local storage)
+      if (marketingKit.file && fs.existsSync(marketingKit.file)) {
+        await unlinkFile(marketingKit.file);
+      }
+
+      // Simpan path file baru
+      marketingKit.file = file.path;
+    }
+
+    // Update kolom lainnya
+    marketingKit.name = name || marketingKit.name;
+    marketingKit.file_type = file_type || marketingKit.file_type;
+    marketingKit.service_id = service_id || marketingKit.service_id;
+
+    // Simpan perubahan
+    await marketingKit.save();
 
     res.json({ message: 'Marketing kit updated', marketing_kit: marketingKit });
   } catch (error) {

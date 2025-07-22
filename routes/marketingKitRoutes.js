@@ -28,6 +28,7 @@ router.put(
   '/:id',
   authMiddleware.authenticate,
   authMiddleware.authorize('admin', 'management'),
+  uploadMiddleware.single('file'),
   marketingKitController.updateMarketingKit
 );
 router.delete(
