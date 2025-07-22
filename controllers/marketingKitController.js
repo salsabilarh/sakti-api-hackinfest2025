@@ -145,21 +145,27 @@ exports.downloadMarketingKit = async (req, res) => {
       purpose,
     });
 
-    // Ekstensi file, misalnya "pdf"
-    const fileExt = 'pdf';
+    // Ekstrak public_id jika file_path adalah URL
+    const getPublicId = (filePath) => {
+      const match = filePath.match(/upload\/(?:v\d+\/)?(.+?)\.[^/.]+$/);
+      return match ? match[1] : null;
+    };
 
-    // ⚠️ Gunakan public_id saja tanpa ekstensi
-    const publicIdWithoutExt = marketingKit.file_path.replace(/\.[^/.]+$/, '');
+    const publicIdWithoutExt = getPublicId(marketingKit.file_path);
+    if (!publicIdWithoutExt) {
+      return res.status(500).json({ error: 'Invalid file path format' });
+    }
 
     const signedUrl = cloudinary.utils.private_download_url(
-      publicIdWithoutExt, // ← ini penting
-      fileExt,
+      publicIdWithoutExt,
+      'pdf',
       {
-        type: 'authenticated', // atau 'private'
-        expires_at: Math.floor(Date.now() / 1000) + 60 // 1 menit
+        type: 'authenticated',
+        expires_at: Math.floor(Date.now() / 1000) + 60
       }
     );
 
+    console.log('Generated signed URL:', signedUrl);
     return res.status(302).redirect(signedUrl);
   } catch (error) {
     console.error('Download error:', error);
