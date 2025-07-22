@@ -15,7 +15,7 @@ router.post(
   authMiddleware.authenticate,
   marketingKitController.downloadMarketingKit
 );
-
+router.get('/:id/direct-download', authenticate, marketingKitController.directDownloadMarketingKit);
 // Protected routes (management and admin access)
 router.post(
   '/',

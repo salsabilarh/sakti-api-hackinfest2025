@@ -183,6 +183,41 @@ exports.downloadMarketingKit = async (req, res) => {
   }
 };
 
+exports.directDownloadMarketingKit = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const marketingKit = await MarketingKit.findByPk(id);
+    if (!marketingKit) {
+      return res.status(404).json({ error: 'Marketing kit not found' });
+    }
+
+    const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
+    const downloadFilename = marketingKit.name || 'file';
+
+    const signedUrl = cloudinary.utils.private_download_url(
+      marketingKit.cloudinary_public_id,
+      fileExtension,
+      {
+        resource_type: 'raw',
+        type: 'upload',
+        expires_at: Math.floor(Date.now() / 1000) + 60,
+        attachment: downloadFilename,
+      }
+    );
+
+    const fileStream = await fetch(signedUrl);
+    const buffer = await fileStream.arrayBuffer();
+
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+    res.setHeader('Content-Type', fileStream.headers.get('Content-Type'));
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error('Direct download error:', error);
+    res.status(500).json({ error: 'Failed to process direct download' });
+  }
+};
+
 exports.updateMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
