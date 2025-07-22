@@ -3,7 +3,7 @@ const { MarketingKit, Service, User, DownloadLog } = require('../models');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require('../config/cloudinary');
 
 exports.getAllMarketingKits = async (req, res) => {
   try {
@@ -173,6 +173,7 @@ exports.downloadMarketingKit = async (req, res) => {
         expires_at: Math.floor(Date.now() / 1000) + 60
       }
     );
+    console.log('CLOUDINARY CONFIG:', cloudinary.config());
 
     console.log('Generated signed URL:', signedUrl);
     return res.status(302).redirect(signedUrl);
