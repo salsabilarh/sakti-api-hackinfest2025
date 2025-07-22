@@ -169,7 +169,7 @@ exports.downloadMarketingKit = async (req, res) => {
       publicIdWithoutExt,
       'pdf',
       {
-        type: 'authenticated',
+        type: 'upload', // ganti 'authenticated' jadi 'upload'
         expires_at: Math.floor(Date.now() / 1000) + 60
       }
     );
