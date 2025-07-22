@@ -90,34 +90,29 @@ exports.getMarketingKitById = async (req, res) => {
 exports.createMarketingKit = async (req, res) => {
   try {
     const file = req.file;
-
     if (!file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
 
-    // Upload ke Cloudinary
-    const uploadResult = cloudinary.uploader.upload(filePath, {
-      public_id: 'marketing_kits/xchfw2ty4kl48cmkjxyo',
+    // Upload file ke Cloudinary
+    const uploadResult = await cloudinary.uploader.upload(file.path, {
+      folder: 'marketing_kits',
       resource_type: 'auto',
     });
 
-    // Hapus file lokal
+    // Hapus file lokal setelah upload
     fs.unlink(file.path, (err) => {
       if (err) console.warn('Failed to delete local file:', err);
     });
 
-    // Simpan ke DB
     const newMarketingKit = await MarketingKit.create({
-      name: req.body.name,
-      file_path: uploadResult.secure_url,
-      cloudinary_public_id: uploadResult.public_id,
+      name: file.originalname,
+      file_path: uploadResult.secure_url, // URL Cloudinary
+      cloudinary_public_id: uploadResult.public_id, // ID Cloudinary
       file_type: req.body.file_type,
       service_id: req.body.service_id,
       uploaded_by: req.user.id,
     });
-
-    console.log('req.body:', req.body);
-    console.log('req.file:', req.file);
 
     return res.status(201).json({
       message: 'Marketing kit uploaded successfully',

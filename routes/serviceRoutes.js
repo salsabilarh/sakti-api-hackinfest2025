@@ -3,18 +3,18 @@ const express = require('express');
 const router = express.Router();
 const serviceController = require('../controllers/serviceController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const upload = multer({ dest: 'uploads/' });
 
 // Public routes (viewer access)
 router.get('/', authMiddleware.authenticate, serviceController.getAllServices);
 router.get('/:id', authMiddleware.authenticate, serviceController.getServiceById);
 
 // Protected routes (management and admin access)
-router.post(
-  '/',
+router.post('/', 
+  upload.single('file'), 
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
-  serviceController.createService
-);
+  authMiddleware.authorize('admin', 'management'), 
+  createMarketingKit);
 router.put(
   '/:id',
   authMiddleware.authenticate,
