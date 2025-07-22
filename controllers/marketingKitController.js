@@ -159,24 +159,23 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(500).json({ error: 'Invalid file path format' });
     }
 
-    const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
+    // const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
     const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
     const originalFileName = path.basename(marketingKit.file_path);
 
-    // Nama file untuk diunduh
     const downloadFilename = marketingKit.name || originalFileName;
 
     const signedUrl = cloudinary.utils.private_download_url(
-      sanitizedPublicId,
-      fileExtension, // Ekstensi file sesuai dengan path-nya
-      {
-        type: 'upload', // atau 'authenticated' sesuai tipe upload
-        expires_at: Math.floor(Date.now() / 1000) + 60,
-        attachment: downloadFilename, // Menentukan nama file saat diunduh
-      }
-    );
+    marketingKit.cloudinary_public_id,
+    fileExtension,
+    {
+      type: 'upload',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+      attachment: downloadFilename,
+    }
+  );
 
-    return res.status(302).redirect(signedUrl);
+  return res.redirect(signedUrl); // 302 otomatis
   } catch (error) {
     console.error('Download error:', error);
     return res.status(500).json({ error: 'Failed to download marketing kit' });
