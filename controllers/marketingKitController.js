@@ -99,7 +99,7 @@ exports.createMarketingKit = async (req, res) => {
     // Upload file ke Cloudinary
     const uploadResult = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
-      resource_type: 'raw', // ⬅️ pastikan ini adalah 'raw'
+      resource_type: 'raw',
     });
 
     // Hapus file lokal setelah upload
@@ -108,7 +108,7 @@ exports.createMarketingKit = async (req, res) => {
     });
 
     const newMarketingKit = await MarketingKit.create({
-      name: file.originalname,
+      name: req.body.name || file.originalname,
       file_path: uploadResult.secure_url,
       cloudinary_public_id: uploadResult.public_id,
       file_type: req.body.file_type,
@@ -166,12 +166,12 @@ exports.downloadMarketingKit = async (req, res) => {
     const downloadFilename = marketingKit.name || 'file';
 
     const signedUrl = cloudinary.utils.private_download_url(
-      marketingKit.cloudinary_public_id, // ✅ gunakan public ID langsung
+      marketingKit.cloudinary_public_id,
       fileExtension,
       {
         resource_type: 'raw',
         type: 'upload',
-        expires_at: Math.floor(Date.now() / 1000) + 60, // 1 menit
+        expires_at: Math.floor(Date.now() / 1000) + 60,
         attachment: downloadFilename,
       }
     );
