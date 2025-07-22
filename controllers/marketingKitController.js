@@ -99,6 +99,7 @@ exports.createMarketingKit = async (req, res) => {
     const uploadResult = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
       resource_type: 'auto',
+      type:"authenticated"
     });
 
     // Hapus file lokal
@@ -147,8 +148,16 @@ exports.downloadMarketingKit = async (req, res) => {
 
     // Ekstrak public_id jika file_path adalah URL
     const getPublicId = (filePath) => {
-      const match = filePath.match(/upload\/(?:v\d+\/)?(.+?)\.[^/.]+$/);
-      return match ? match[1] : null;
+      try {
+        const url = new URL(filePath);
+        const parts = url.pathname.split('/');
+        const fileWithExt = parts.pop(); // "xchfw2ty4kl48cmkjxyo.pdf"
+        const fileNameOnly = fileWithExt.replace(/\.[^/.]+$/, ''); // remove extension
+        const folderPath = parts.slice(parts.indexOf('upload') + 1).join('/'); // e.g., "v1234/marketing_kits"
+        return `${folderPath}/${fileNameOnly}`; // result: "marketing_kits/xchfw2ty4kl48cmkjxyo"
+      } catch {
+        return null;
+      }
     };
 
     const publicIdWithoutExt = getPublicId(marketingKit.file_path);
