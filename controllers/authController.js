@@ -273,7 +273,9 @@ exports.updatePassword = async (req, res) => {
     }
 
     const hashedPassword = await argon2.hash(new_password);
-    await user.update({ password: hashedPassword });
+    user.password = hashedPassword;
+    user.temporary_password = null; // hapus setelah diganti manual
+    await user.save();
 
     res.json({ message: 'Password berhasil diperbarui' });
   } catch (error) {

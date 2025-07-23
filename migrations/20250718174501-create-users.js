@@ -24,6 +24,10 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: false,
       },
+      temporary_password: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       role: {
         type: Sequelize.STRING(15),
         defaultValue: 'viewer',

@@ -3,6 +3,16 @@ const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
+const secretKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key'; // simpan aman di env
+
+function encrypt(text) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
+  let encrypted = cipher.update(text, 'utf-8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
 exports.getDashboardStats = async (req, res) => {
   try {
     // Hitung total user yang sudah diverifikasi
@@ -587,6 +597,7 @@ exports.createUser = async (req, res) => {
     // 🔐 Generate random password
     const generatedPassword = crypto.randomBytes(6).toString('base64'); // bisa diubah sesuai kebutuhan
     const hashedPassword = await argon2.hash(generatedPassword);
+    const encryptedTempPassword = encrypt(generatedPassword);
 
     const newUser = await User.create({
       full_name,
@@ -596,6 +607,7 @@ exports.createUser = async (req, res) => {
       unit_kerja_id: (role === 'admin' || role === 'viewer') ? null : unit_kerja_id,
       is_active: true,
       is_verified: true,
+      temporary_password: encryptedTempPassword
     });
 
     res.status(201).json({
@@ -618,6 +630,29 @@ exports.createUser = async (req, res) => {
       message: 'Gagal membuat user',
       error: process.env.NODE_ENV === 'development' ? err.message : null,
     });
+  }
+};
+
+exports.getTemporaryPassword = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
+
+    if (!user.temporary_password) {
+      return res.status(404).json({ message: "Password sementara sudah tidak tersedia" });
+    }
+
+    // 🧹 Dekripsi password
+    const [ivHex, encrypted] = user.temporary_password.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf-8');
+    decrypted += decipher.final('utf-8');
+
+    res.json({ password: decrypted });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mengambil password sementara" });
   }
 };
 
