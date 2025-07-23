@@ -598,9 +598,6 @@ exports.createUser = async (req, res) => {
       is_verified: true,
     });
 
-    // TODO: Kirim password ke email user, atau log sementara
-    console.log(`Password untuk ${email}: ${generatedPassword}`);
-
     res.status(201).json({
       success: true,
       message: 'User berhasil dibuat',
@@ -610,7 +607,7 @@ exports.createUser = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         unit_kerja_id: newUser.unit_kerja_id,
-        // password: generatedPassword, // JANGAN dikembalikan di production
+        password: generatedPassword
       }
     });
 
