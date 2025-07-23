@@ -9,30 +9,30 @@ module.exports = {
         autoIncrement: true
       },
       user_id: {
-        type: Sequelize.UUID, // Ubah ke UUID untuk match dengan users.id
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'users', // Ubah ke lowercase untuk match dengan nama tabel
+          model: 'users', 
           key: 'id'
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
       current_unit_id: {
-        type: Sequelize.UUID, // Ubah ke UUID untuk match dengan units.id
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'units', // Pastikan ini match dengan nama tabel units
+          model: 'units',
           key: 'id'
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
       requested_unit_id: {
-        type: Sequelize.UUID, // Ubah ke UUID untuk match dengan units.id
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'units', // Pastikan ini match dengan nama tabel units
+          model: 'units',
           key: 'id'
         },
         onUpdate: 'CASCADE',

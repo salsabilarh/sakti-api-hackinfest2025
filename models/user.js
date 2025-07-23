@@ -26,6 +26,10 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'viewer',
       allowNull: false,
     },
+    unit_kerja_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

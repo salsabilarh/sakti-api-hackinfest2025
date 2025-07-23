@@ -31,7 +31,7 @@ module.exports = {
       },
       unit_kerja_id: {
         type: Sequelize.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'units',
           key: 'id',

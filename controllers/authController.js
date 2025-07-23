@@ -64,8 +64,15 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Validasi unit kerja jika ada
-    if (unit_kerja_id) {
+    // Validasi unit kerja: wajib diisi jika bukan viewer
+    if (role !== 'viewer') {
+      if (!unit_kerja_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unit kerja wajib diisi untuk role selain viewer'
+        });
+      }
+
       const unitExists = await Unit.findByPk(unit_kerja_id);
       if (!unitExists) {
         return res.status(400).json({
@@ -83,7 +90,7 @@ exports.register = async (req, res) => {
       full_name,
       email,
       password: hashedPassword,
-      unit_kerja_id: unit_kerja_id || null,
+      unit_kerja_id: role === 'viewer' ? null : unit_kerja_id,
       role,
       is_verified: null,
       is_active: true

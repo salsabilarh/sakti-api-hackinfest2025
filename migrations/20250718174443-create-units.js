@@ -15,7 +15,7 @@ module.exports = {
         unique: true,
       },
       type: {
-        type: Sequelize.ENUM('sbu', 'ppk', 'cabang', 'admin'),
+        type: Sequelize.ENUM('sbu', 'ppk', 'cabang'),
         allowNull: false,
       },
       created_at: {

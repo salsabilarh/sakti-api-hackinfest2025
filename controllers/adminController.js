@@ -1,6 +1,7 @@
 const { User, PasswordResetRequest, DownloadLog, Unit, UnitChangeRequest, MarketingKit } = require('../models');
 const { Op } = require('sequelize');
 const argon2 = require('argon2');
+const crypto = require('crypto');
 
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -549,42 +550,77 @@ exports.getDownloadLogs = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { email, password, full_name, unit_kerja_id, role, is_active } = req.body;
+    const { full_name, email, role, unit_kerja_id } = req.body;
 
-    // Cek apakah email sudah terdaftar
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+    if (!full_name || !email || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nama lengkap, email, dan role wajib diisi',
+      });
     }
 
-    // Hash password
-    const hashedPassword = await argon2.hash(password);
+    if (role !== 'viewer' && role !== 'admin') {
+      if (!unit_kerja_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unit kerja wajib diisi untuk role selain admin dan viewer',
+        });
+      }
 
-    // Buat user baru
-    const user = await User.create({
+      const unit = await Unit.findByPk(unit_kerja_id);
+      if (!unit) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unit kerja tidak ditemukan',
+        });
+      }
+    }
+
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email sudah terdaftar',
+      });
+    }
+
+    // 🔐 Generate random password
+    const generatedPassword = crypto.randomBytes(6).toString('base64'); // bisa diubah sesuai kebutuhan
+    const hashedPassword = await argon2.hash(generatedPassword);
+
+    const newUser = await User.create({
+      full_name,
       email,
       password: hashedPassword,
-      full_name,
-      unit_kerja_id,
       role,
-      is_active: is_active !== false,
+      unit_kerja_id: (role === 'admin' || role === 'viewer') ? null : unit_kerja_id,
+      is_active: true,
       is_verified: true,
     });
 
+    // TODO: Kirim password ke email user, atau log sementara
+    console.log(`Password untuk ${email}: ${generatedPassword}`);
+
     res.status(201).json({
-      message: 'User created successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        unit_kerja_id: user.unit_kerja_id,
-        is_active: user.is_active,
-      },
+      success: true,
+      message: 'User berhasil dibuat',
+      data: {
+        id: newUser.id,
+        full_name: newUser.full_name,
+        email: newUser.email,
+        role: newUser.role,
+        unit_kerja_id: newUser.unit_kerja_id,
+        // password: generatedPassword, // JANGAN dikembalikan di production
+      }
     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create user' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal membuat user',
+      error: process.env.NODE_ENV === 'development' ? err.message : null,
+    });
   }
 };
 
