@@ -60,15 +60,20 @@ exports.authorizeAdvanced = ({ roles = [], allowUnits = [] }) => {
         include: ['unit'],
       });
 
-      // Cek role
       if (!roles.includes(user.role)) {
         return res.status(403).json({ error: 'Access denied. Insufficient role.' });
+      }
+
+      // Tambahkan pengecualian untuk admin
+      if (user.role !== 'admin' && allowUnits.length > 0 && (!user.unit || !allowUnits.includes(user.unit.type))) {
+        return res.status(403).json({ error: 'Access denied. Invalid unit type.' });
       }
 
       // Cek unit
       if (allowUnits.length > 0 && (!user.unit || !allowUnits.includes(user.unit.type))) {
         return res.status(403).json({ error: 'Access denied. Invalid unit type.' });
       }
+      
 
       req.user = user; // perbarui user dengan relasi unit
       next();
