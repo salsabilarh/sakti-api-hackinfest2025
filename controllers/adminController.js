@@ -3,11 +3,12 @@ const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
-const secretKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key';
+const rawKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key';
+const secretKey = crypto.createHash('sha256').update(rawKey).digest(); // hasil = 32 byte
 
 function encrypt(text) {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
+  const cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
   let encrypted = cipher.update(text, 'utf-8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
