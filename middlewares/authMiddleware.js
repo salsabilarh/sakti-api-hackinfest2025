@@ -53,6 +53,41 @@ exports.authorize = (...roles) => {
   };
 };
 
+exports.authorizeAdvanced = ({ roles = [], allowUnits = [] }) => {
+  return async (req, res, next) => {
+    try {
+      const user = await User.findByPk(req.user.id, {
+        include: ['unit'],
+      });
+
+      // Cek role
+      if (!roles.includes(user.role)) {
+        return res.status(403).json({ error: 'Access denied. Insufficient role.' });
+      }
+
+      // Cek unit
+      if (allowUnits.length > 0 && (!user.unit || !allowUnits.includes(user.unit.type))) {
+        return res.status(403).json({ error: 'Access denied. Invalid unit type.' });
+      }
+
+      req.user = user; // perbarui user dengan relasi unit
+      next();
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Authorization check failed' });
+    }
+  };
+};
+
+exports.denyRole = (...roles) => {
+  return (req, res, next) => {
+    if (roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied for this role.' });
+    }
+    next();
+  };
+};
+
 exports.unitAccess = (unitTypes) => {
   return async (req, res, next) => {
     try {

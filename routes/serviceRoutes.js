@@ -1,4 +1,3 @@
-// routes/serviceRoutes.js
 const express = require('express');
 const router = express.Router();
 const serviceController = require('../controllers/serviceController');
@@ -11,23 +10,28 @@ router.get('/', authMiddleware.authenticate, serviceController.getAllServices);
 router.get('/:id', authMiddleware.authenticate, serviceController.getServiceById);
 
 // Protected routes (management and admin access)
-router.post('/import-services', 
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
-  upload.single('file'), 
-  serviceController.importServices
-);
+// router.post('/import-services', 
+//   authMiddleware.authenticate,
+//   authMiddleware.authorize('admin', 'management'),
+//   upload.single('file'), 
+//   serviceController.importServices
+// );
+
+// router.get('/template/download', 
+//   authMiddleware.authenticate,
+//   authMiddleware.authorize('admin', 'management'),
+//   serviceController.downloadTemplate);
 
 router.post(
   '/',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   serviceController.createService
 );
 router.put(
   '/:id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   serviceController.updateService
 );
 router.delete(

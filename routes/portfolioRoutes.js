@@ -7,43 +7,33 @@ const authMiddleware = require('../middlewares/authMiddleware');
 router.get('/', authMiddleware.authenticate, portfolioController.getAllPortfolios);
 router.get('/:id', authMiddleware.authenticate, portfolioController.getPortfolioById);
 
-// Protected routes (admin only)
-router.post(
-  '/',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  portfolioController.createPortfolio
-);
-router.put(
-  '/:id',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  portfolioController.updatePortfolio
-);
-router.delete(
-  '/:id',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  portfolioController.deletePortfolio
-);
+// Protected routes (admin + management sbu/ppk)
+const accessControl = authMiddleware.authorizeAdvanced({
+  roles: ['admin', 'management'],
+  allowUnits: ['sbu', 'ppk'],
+});
 
-// Sub portfolio routes (admin only)
+router.post('/', authMiddleware.authenticate, accessControl, portfolioController.createPortfolio);
+router.put('/:id', authMiddleware.authenticate, accessControl, portfolioController.updatePortfolio);
+router.delete('/:id', authMiddleware.authenticate, accessControl, portfolioController.deletePortfolio);
+
+// Sub portfolio routes
 router.post(
   '/:portfolio_id/sub-portfolios',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   portfolioController.createSubPortfolio
 );
 router.put(
   '/:portfolio_id/sub-portfolios/:sub_portfolio_id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   portfolioController.updateSubPortfolio
 );
 router.delete(
   '/:portfolio_id/sub-portfolios/:sub_portfolio_id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   portfolioController.deleteSubPortfolio
 );
 

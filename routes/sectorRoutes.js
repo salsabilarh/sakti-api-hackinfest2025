@@ -1,4 +1,3 @@
-// routes/sectorRoutes.js
 const express = require('express');
 const router = express.Router();
 const sectorController = require('../controllers/sectorController');
@@ -8,43 +7,33 @@ const authMiddleware = require('../middlewares/authMiddleware');
 router.get('/', authMiddleware.authenticate, sectorController.getAllSectors);
 router.get('/:id', authMiddleware.authenticate, sectorController.getSectorById);
 
-// Protected routes (admin only)
-router.post(
-  '/',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  sectorController.createSector
-);
-router.put(
-  '/:id',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  sectorController.updateSector
-);
-router.delete(
-  '/:id',
-  authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
-  sectorController.deleteSector
-);
+// Protected routes (admin + management sbu/ppk)
+const accessControl = authMiddleware.authorizeAdvanced({
+  roles: ['admin', 'management'],
+  allowUnits: ['sbu', 'ppk'],
+});
 
-// Sub sector routes (admin only)
+router.post('/', authMiddleware.authenticate, accessControl, sectorController.createSector);
+router.put('/:id', authMiddleware.authenticate, accessControl, sectorController.updateSector);
+router.delete('/:id', authMiddleware.authenticate, accessControl, sectorController.deleteSector);
+
+// Sub sector routes
 router.post(
   '/:sector_id/sub-sectors',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   sectorController.createSubSector
 );
 router.put(
   '/:sector_id/sub-sectors/:sub_sector_id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   sectorController.updateSubSector
 );
 router.delete(
   '/:sector_id/sub-sectors/:sub_sector_id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin'),
+  accessControl,
   sectorController.deleteSubSector
 );
 

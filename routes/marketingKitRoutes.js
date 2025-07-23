@@ -5,36 +5,63 @@ const marketingKitController = require('../controllers/marketingKitController');
 const authMiddleware = require('../middlewares/authMiddleware');
 const uploadMiddleware = require('../middlewares/uploadCloudinary');
 
-// Public routes (viewer, pdo, management access)
-router.get('/', authMiddleware.authenticate, marketingKitController.getAllMarketingKits);
-router.get('/:id', authMiddleware.authenticate, marketingKitController.getMarketingKitById);
+// Viewer tidak boleh akses menu marketing kit
+router.get(
+  '/',
+  authMiddleware.authenticate,
+  (req, res, next) => {
+    if (req.user.role === 'viewer') {
+      return res.status(403).json({ error: 'Access denied for viewers' });
+    }
+    next();
+  },
+  marketingKitController.getAllMarketingKits
+);
 
-// Download route (all authenticated users)
+router.get(
+  '/:id',
+  authMiddleware.authenticate,
+  (req, res, next) => {
+    if (req.user.role === 'viewer') {
+      return res.status(403).json({ error: 'Access denied for viewers' });
+    }
+    next();
+  },
+  marketingKitController.getMarketingKitById
+);
+
+// Download diperbolehkan semua kecuali viewer
 router.post(
   '/:id/download',
   authMiddleware.authenticate,
+  (req, res, next) => {
+    if (req.user.role === 'viewer') {
+      return res.status(403).json({ error: 'Access denied for viewers' });
+    }
+    next();
+  },
   marketingKitController.downloadMarketingKit
 );
 
-// Protected routes (management and admin access)
+// Tambah, edit, hapus hanya untuk admin dan management (sbu/ppk)
 router.post(
   '/',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   uploadMiddleware.single('file'),
   marketingKitController.createMarketingKit
 );
 router.put(
   '/:id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   uploadMiddleware.single('file'),
   marketingKitController.updateMarketingKit
 );
 router.delete(
   '/:id',
   authMiddleware.authenticate,
-  authMiddleware.authorize('admin', 'management'),
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   marketingKitController.deleteMarketingKit
 );
 
