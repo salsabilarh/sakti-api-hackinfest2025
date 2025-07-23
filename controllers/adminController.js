@@ -6,12 +6,12 @@ const crypto = require('crypto');
 const rawKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key';
 const secretKey = crypto.createHash('sha256').update(rawKey).digest(); // hasil = 32 byte
 
-function encrypt(text) {
+function encrypt(plainText) {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
-  let encrypted = cipher.update(text, 'utf-8', 'hex');
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
+  let encrypted = cipher.update(plainText, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  return iv.toString('hex') + ':' + encrypted;
+  return `${iv.toString('hex')}:${encrypted}`;
 }
 
 exports.getDashboardStats = async (req, res) => {
@@ -637,25 +637,44 @@ exports.createUser = async (req, res) => {
 exports.getTemporaryPassword = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
+
     if (!user) {
       return res.status(404).json({ message: "User tidak ditemukan" });
     }
 
+    // Pastikan password sementara masih ada
     if (!user.temporary_password) {
-      return res.status(404).json({ message: "Password sementara tidak tersedia atau sudah dihapus" });
+      return res.status(404).json({ message: "Password sementara tidak tersedia atau sudah diganti" });
     }
 
-    // Dekripsi
-    const [ivHex, encrypted] = user.temporary_password.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf-8');
-    decrypted += decipher.final('utf-8');
+    const tempPass = user.temporary_password;
 
-    res.json({ password: decrypted });
+    // Pastikan format terenkripsi mengandung titik dua (:) sebagai pemisah IV dan ciphertext
+    if (!tempPass.includes(':')) {
+      return res.status(500).json({ message: "Format password sementara tidak valid" });
+    }
+
+    const [ivHex, encrypted] = tempPass.split(':');
+
+    if (!ivHex || !encrypted) {
+      return res.status(500).json({ message: "Format enkripsi tidak lengkap" });
+    }
+
+    const iv = Buffer.from(ivHex, 'hex');
+
+    // Pastikan panjang IV = 16 byte
+    if (iv.length !== 16) {
+      return res.status(500).json({ message: "IV tidak valid" });
+    }
+
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return res.json({ password: decrypted });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Gagal mengambil password sementara" });
+    console.error("Gagal decrypt:", error);
+    return res.status(500).json({ message: "Gagal mengambil password sementara" });
   }
 };
 
