@@ -19,6 +19,15 @@ router.get(
   authMiddleware.authorize('admin'),
   adminController.getAllUsers
 );
+
+// Ambil password sementara user (admin only)
+router.get(
+  '/users/:id/temporary-password',
+  authMiddleware.authenticate,
+  authMiddleware.authorize('admin'),
+  adminController.getTemporaryPassword
+);
+
 router.post(
   '/users',
   authMiddleware.authenticate,

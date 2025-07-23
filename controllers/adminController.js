@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
-const secretKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key'; // simpan aman di env
+const secretKey = process.env.TEMP_PASSWORD_SECRET || 'dfakjdfq293cr2934c2043c-024xo24i0d40x';
 
 function encrypt(text) {
   const iv = crypto.randomBytes(16);
@@ -636,13 +636,15 @@ exports.createUser = async (req, res) => {
 exports.getTemporaryPassword = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
-
-    if (!user.temporary_password) {
-      return res.status(404).json({ message: "Password sementara sudah tidak tersedia" });
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
 
-    // 🧹 Dekripsi password
+    if (!user.temporary_password) {
+      return res.status(404).json({ message: "Password sementara tidak tersedia atau sudah dihapus" });
+    }
+
+    // Dekripsi
     const [ivHex, encrypted] = user.temporary_password.split(':');
     const iv = Buffer.from(ivHex, 'hex');
     const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secretKey, 'utf-8'), iv);
@@ -650,8 +652,8 @@ exports.getTemporaryPassword = async (req, res) => {
     decrypted += decipher.final('utf-8');
 
     res.json({ password: decrypted });
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Gagal mengambil password sementara" });
   }
 };
