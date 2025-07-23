@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
-const secretKey = process.env.TEMP_PASSWORD_SECRET || 'dfakjdfq293cr2934c2043c-024xo24i0d40x';
+const secretKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key';
 
 function encrypt(text) {
   const iv = crypto.randomBytes(16);
