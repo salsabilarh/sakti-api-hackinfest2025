@@ -646,7 +646,9 @@ exports.getTemporaryPassword = async (req, res) => {
 
     // Pastikan password sementara masih ada
     if (!user.temporary_password) {
-      return res.status(404).json({ message: "Password sementara tidak tersedia atau sudah diganti" });
+      return res.status(404).json({
+        message: "Password sementara tidak tersedia atau sudah diganti oleh user",
+      });
     }
 
     const tempPass = user.temporary_password;
