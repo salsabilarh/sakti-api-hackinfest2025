@@ -1,4 +1,4 @@
-const { User, PasswordResetRequest, DownloadLog, Unit, UnitChangeRequest, MarketingKit } = require('../models');
+const { User, PasswordResetRequest, DownloadLog, Unit, UnitChangeRequest, MarketingKit, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
