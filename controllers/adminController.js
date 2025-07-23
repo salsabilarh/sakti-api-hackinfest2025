@@ -3,8 +3,10 @@ const { Op } = require('sequelize');
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
-const rawKey = process.env.TEMP_PASSWORD_SECRET || 'default_secret_key';
-const secretKey = crypto.createHash('sha256').update(rawKey).digest(); // hasil = 32 byte
+const secretKey = process.env.TEMP_PASSWORD_SECRET_KEY;
+if (secretKey.length !== 32) {
+  throw new Error("Kunci enkripsi harus 32 karakter (AES-256)");
+}
 
 function encrypt(plainText) {
   const iv = crypto.randomBytes(16);
