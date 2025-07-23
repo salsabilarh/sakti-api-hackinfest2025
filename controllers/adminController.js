@@ -645,7 +645,7 @@ exports.updateUser = async (req, res) => {
       email: email ?? user.email,
       full_name: full_name ?? user.full_name,
       role: role ?? user.role,
-      unit_kerja_id: unit_kerja_id ?? user.unit_kerja_id,
+      unit_kerja_id,
       is_active: is_active !== undefined ? is_active : user.is_active,
       is_verified: is_verified !== undefined ? is_verified : user.is_verified,
     });
