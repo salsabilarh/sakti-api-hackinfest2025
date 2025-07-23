@@ -85,7 +85,7 @@ exports.getAllUsers = async (req, res) => {
     const where = {};
     const include = [];
 
-    // 🔍 Pencarian nama / email
+    // Pencarian nama / email
     if (search) {
       where[Op.or] = [
         { full_name: { [Op.like]: `%${search}%` } },
@@ -93,17 +93,17 @@ exports.getAllUsers = async (req, res) => {
       ];
     }
 
-    // 🎯 Filter Role
+    // Filter Role
     if (role) {
       where.role = role;
     }
 
-    // ✅ Filter status aktif
+    // Filter status aktif
     if (status) {
       where.is_active = status.toLowerCase() === "active";
     }
 
-    // ✅ Filter status verifikasi
+    // Filter status verifikasi
     if (verified !== undefined) {
       if (verified === "true") {
         where.is_verified = true;
@@ -115,15 +115,15 @@ exports.getAllUsers = async (req, res) => {
       where.is_verified = { [Op.ne]: null };
     }
 
-    // 🏢 Filter unit kerja (berdasarkan ID unit)
+    // Filter unit kerja
     if (unit) {
       where.unit_kerja_id = unit;
     }
 
-    // 🔢 Hitung total
+    // Hitung total
     const total = await User.count({ where });
 
-    // 🗂 Ambil data user dengan relasi
+    // Ambil data user dengan relasi
     const users = await User.findAll({
       where,
       include: [
@@ -133,16 +133,20 @@ exports.getAllUsers = async (req, res) => {
           attributes: ["id", "name"],
         },
       ],
-      attributes: [
-        "id",
-        "full_name",
-        "email",
-        "role",
-        "is_active",
-        "is_verified",
-        "last_login",
-        "created_at",
-      ],
+      attributes: {
+        include: [
+          "id",
+          "full_name",
+          "email",
+          "role",
+          "is_active",
+          "is_verified",
+          "last_login",
+          "created_at",
+          // Tambahkan has_temp_password sebagai virtual field boolean
+          [sequelize.literal(`CASE WHEN temporary_password IS NOT NULL THEN true ELSE false END`), "has_temp_password"]
+        ],
+      },
       order: [[sort, direction.toUpperCase() === "DESC" ? "DESC" : "ASC"]],
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
