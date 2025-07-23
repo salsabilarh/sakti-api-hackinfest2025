@@ -48,12 +48,11 @@ exports.getPortfolioById = async (req, res) => {
 
 exports.createPortfolio = async (req, res) => {
   try {
-    const { name, code } = req.body;
+    const { name } = req.body;
 
     // Buat portfolio baru
     const portfolio = await Portfolio.create({
-      name,
-      code,
+      name
     });
 
     res.status(201).json({ portfolio });
