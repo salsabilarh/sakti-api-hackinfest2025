@@ -31,9 +31,22 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   MarketingKit.associate = (models) => {
-    MarketingKit.belongsTo(models.Service, { foreignKey: 'service_id', as: 'service' });
-    MarketingKit.belongsTo(models.User, { foreignKey: 'uploaded_by', as: 'uploader' });
-    MarketingKit.hasMany(models.DownloadLog, { foreignKey: 'marketing_kit_id', as: 'download_logs' });
+    MarketingKit.belongsToMany(models.Service, {
+      through: 'marketing_kit_services',
+      foreignKey: 'marketing_kit_id',
+      otherKey: 'service_id',
+      as: 'services',
+    });
+
+    MarketingKit.belongsTo(models.User, {
+      foreignKey: 'uploaded_by',
+      as: 'uploader',
+    });
+
+    MarketingKit.hasMany(models.DownloadLog, {
+      foreignKey: 'marketing_kit_id',
+      as: 'download_logs',
+    });
   };
 
   return MarketingKit;

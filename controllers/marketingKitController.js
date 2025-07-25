@@ -1,4 +1,3 @@
-// controllers/marketingKitController.js
 const { MarketingKit, Service, User, DownloadLog } = require('../models');
 const fs = require('fs');
 const path = require('path');
@@ -11,37 +10,28 @@ exports.getAllMarketingKits = async (req, res) => {
   try {
     const { search, service, file_type } = req.query;
     const where = {};
-    const include = [];
+    const include = [
+      {
+        model: Service,
+        as: 'services',
+        attributes: ['id', 'name', 'code'],
+        through: { attributes: [] },
+        ...(service ? { where: { id: service } } : {}),
+      },
+      {
+        model: User,
+        as: 'uploader',
+        attributes: ['id', 'full_name', 'email'],
+      },
+    ];
 
-    // Always include service
-    const serviceInclude = {
-      model: Service,
-      as: 'service',
-      attributes: ['id', 'name', 'code'],
-    };
-
-    if (service) {
-      serviceInclude.where = { id: service };
-    }
-
-    include.push(serviceInclude);
-
-    // Include uploader
-    include.push({
-      model: User,
-      as: 'uploader',
-      attributes: ['id', 'full_name', 'email'],
-    });
-
-    // Search
     if (search) {
       where[Op.or] = [
         { name: { [Op.like]: `%${search}%` } },
-        { '$service.name$': { [Op.like]: `%${search}%` } },
+        { '$services.name$': { [Op.like]: `%${search}%` } },
       ];
     }
 
-    // File type
     if (file_type) {
       where.file_type = file_type;
     }
@@ -67,8 +57,9 @@ exports.getMarketingKitById = async (req, res) => {
       include: [
         {
           model: Service,
-          as: 'service',
+          as: 'services',
           attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
         },
         {
           model: User,
@@ -96,13 +87,16 @@ exports.createMarketingKit = async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
 
-    // Upload file ke Cloudinary
+    const serviceIds = req.body.service_ids;
+    if (!serviceIds || !Array.isArray(serviceIds)) {
+      return res.status(400).json({ message: 'service_ids must be an array' });
+    }
+
     const uploadResult = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
       resource_type: 'raw',
     });
 
-    // Hapus file lokal setelah upload
     fs.unlink(file.path, (err) => {
       if (err) console.warn('Failed to delete local file:', err);
     });
@@ -112,9 +106,10 @@ exports.createMarketingKit = async (req, res) => {
       file_path: uploadResult.secure_url,
       cloudinary_public_id: uploadResult.public_id,
       file_type: req.body.file_type,
-      service_id: req.body.service_id,
       uploaded_by: req.user.id,
     });
+
+    await newMarketingKit.setServices(serviceIds);
 
     return res.status(201).json({
       message: 'Marketing kit uploaded successfully',
@@ -123,6 +118,54 @@ exports.createMarketingKit = async (req, res) => {
   } catch (error) {
     console.error('Upload error:', error);
     return res.status(500).json({ message: 'Error uploading marketing kit' });
+  }
+};
+
+exports.updateMarketingKit = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, file_type, service_ids } = req.body;
+    const file = req.file;
+
+    const marketingKit = await MarketingKit.findByPk(id);
+    if (!marketingKit) {
+      return res.status(404).json({ error: 'Marketing kit not found' });
+    }
+
+    if (file) {
+      if (marketingKit.cloudinary_public_id) {
+        await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
+      }
+
+      const uploadResult = await cloudinary.uploader.upload(file.path, {
+        folder: 'marketing_kits',
+        resource_type: 'raw',
+      });
+
+      fs.unlink(file.path, (err) => {
+        if (err) console.warn('Failed to delete local file:', err);
+      });
+
+      marketingKit.file_path = uploadResult.secure_url;
+      marketingKit.cloudinary_public_id = uploadResult.public_id;
+    }
+
+    marketingKit.name = name ?? marketingKit.name;
+    marketingKit.file_type = file_type ?? marketingKit.file_type;
+
+    await marketingKit.save();
+
+    if (service_ids && Array.isArray(service_ids)) {
+      await marketingKit.setServices(service_ids);
+    }
+
+    res.json({
+      message: 'Marketing kit updated successfully',
+      marketing_kit: marketingKit,
+    });
+  } catch (error) {
+    console.error('Update error:', error);
+    res.status(500).json({ error: 'Failed to update marketing kit' });
   }
 };
 
@@ -142,15 +185,14 @@ exports.downloadMarketingKit = async (req, res) => {
       purpose,
     });
 
-    // Ekstrak public_id jika file_path adalah URL
     const getPublicId = (filePath) => {
       try {
         const url = new URL(filePath);
         const parts = url.pathname.split('/');
-        const fileWithExt = parts.pop(); // "xchfw2ty4kl48cmkjxyo.pdf"
-        const fileNameOnly = fileWithExt.replace(/\.[^/.]+$/, ''); // remove extension
-        const folderPath = parts.slice(parts.indexOf('upload') + 1).join('/'); // e.g., "v1234/marketing_kits"
-        return `${folderPath}/${fileNameOnly}`; // result: "marketing_kits/xchfw2ty4kl48cmkjxyo"
+        const fileWithExt = parts.pop();
+        const fileNameOnly = fileWithExt.replace(/\.[^/.]+$/, '');
+        const folderPath = parts.slice(parts.indexOf('upload') + 1).join('/');
+        return `${folderPath}/${fileNameOnly}`;
       } catch {
         return null;
       }
@@ -161,7 +203,6 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(500).json({ error: 'Invalid file path format' });
     }
 
-    // const sanitizedPublicId = marketingKit.cloudinary_public_id.replace(/^v\d+\//, '');
     const fileExtension = path.extname(marketingKit.file_path).replace('.', '') || 'pdf';
     const downloadFilename = marketingKit.name || 'file';
 
@@ -176,58 +217,10 @@ exports.downloadMarketingKit = async (req, res) => {
       }
     );
 
-    return res.redirect(signedUrl); // 302 otomatis
+    return res.redirect(signedUrl);
   } catch (error) {
     console.error('Download error:', error);
     return res.status(500).json({ error: 'Failed to download marketing kit' });
-  }
-};
-
-exports.updateMarketingKit = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, file_type, service_id } = req.body;
-    const file = req.file;
-
-    const marketingKit = await MarketingKit.findByPk(id);
-    if (!marketingKit) {
-      return res.status(404).json({ error: 'Marketing kit not found' });
-    }
-
-    if (file) {
-      // Hapus file lama dari Cloudinary
-      if (marketingKit.cloudinary_public_id) {
-        await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
-      }
-
-      // Upload file baru ke Cloudinary
-      const uploadResult = await cloudinary.uploader.upload(file.path, {
-        folder: 'marketing_kits',
-        resource_type: 'raw',
-      });
-
-      // Hapus file lokal
-      fs.unlink(file.path, (err) => {
-        if (err) console.warn('Failed to delete local file:', err);
-      });
-
-      marketingKit.file_path = uploadResult.secure_url;
-      marketingKit.cloudinary_public_id = uploadResult.public_id;
-    }
-
-    marketingKit.name = name ?? marketingKit.name;
-    marketingKit.file_type = file_type ?? marketingKit.file_type;
-    marketingKit.service_id = service_id ?? marketingKit.service_id;
-
-    await marketingKit.save();
-
-    res.json({
-      message: 'Marketing kit updated successfully',
-      marketing_kit: marketingKit,
-    });
-  } catch (error) {
-    console.error('Update error:', error);
-    res.status(500).json({ error: 'Failed to update marketing kit' });
   }
 };
 
@@ -239,12 +232,10 @@ exports.deleteMarketingKit = async (req, res) => {
       return res.status(404).json({ message: 'Marketing kit not found' });
     }
 
-    // Hapus dari Cloudinary
     if (marketingKit.cloudinary_public_id) {
       await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
     }
 
-    // Hapus dari DB
     await marketingKit.destroy();
 
     return res.status(200).json({ message: 'Marketing kit deleted successfully' });
@@ -253,4 +244,3 @@ exports.deleteMarketingKit = async (req, res) => {
     return res.status(500).json({ message: 'Error deleting marketing kit' });
   }
 };
-
