@@ -121,10 +121,22 @@ exports.createMarketingKit = async (req, res) => {
   }
 };
 
+const { MarketingKit, Service } = require('../models');
+const cloudinary = require('../config/cloudinary');
+const fs = require('fs');
+const path = require('path');
+
 exports.updateMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, file_type, service_ids } = req.body;
+    const { name, file_type } = req.body;
+    let service_ids = req.body.service_ids || [];
+
+    // Normalize service_ids: handle if single value
+    if (!Array.isArray(service_ids)) {
+      service_ids = [service_ids];
+    }
+
     const file = req.file;
 
     const marketingKit = await MarketingKit.findByPk(id);
@@ -132,16 +144,20 @@ exports.updateMarketingKit = async (req, res) => {
       return res.status(404).json({ error: 'Marketing kit not found' });
     }
 
+    // Handle file update
     if (file) {
+      // Delete previous Cloudinary file if exists
       if (marketingKit.cloudinary_public_id) {
         await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
       }
 
+      // Upload new file
       const uploadResult = await cloudinary.uploader.upload(file.path, {
         folder: 'marketing_kits',
         resource_type: 'raw',
       });
 
+      // Delete temp file from local storage
       fs.unlink(file.path, (err) => {
         if (err) console.warn('Failed to delete local file:', err);
       });
@@ -150,18 +166,25 @@ exports.updateMarketingKit = async (req, res) => {
       marketingKit.cloudinary_public_id = uploadResult.public_id;
     }
 
+    // Update fields
     marketingKit.name = name ?? marketingKit.name;
     marketingKit.file_type = file_type ?? marketingKit.file_type;
 
     await marketingKit.save();
 
-    if (service_ids && Array.isArray(service_ids)) {
+    // Update many-to-many relation
+    if (service_ids.length > 0) {
       await marketingKit.setServices(service_ids);
     }
 
+    // Return updated marketing kit with services
+    const updatedMarketingKit = await MarketingKit.findByPk(id, {
+      include: [{ model: Service }],
+    });
+
     res.json({
       message: 'Marketing kit updated successfully',
-      marketing_kit: marketingKit,
+      marketing_kit: updatedMarketingKit,
     });
   } catch (error) {
     console.error('Update error:', error);

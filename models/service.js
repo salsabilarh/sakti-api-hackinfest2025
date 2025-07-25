@@ -1,3 +1,4 @@
+// models/service.js
 module.exports = (sequelize, DataTypes) => {
   const Service = sequelize.define('Service', {
     id: {
@@ -12,8 +13,12 @@ module.exports = (sequelize, DataTypes) => {
     },
     code: {
       type: DataTypes.STRING(20),
-      allowNull: true,
+      allowNull: false,
       unique: true,
+    },
+    sub_portfolio_code: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
     },
     group: {
       type: DataTypes.STRING(50),
@@ -53,19 +58,17 @@ module.exports = (sequelize, DataTypes) => {
 
   Service.associate = (models) => {
     Service.belongsTo(models.Portfolio, { foreignKey: 'portfolio_id', as: 'portfolio' });
-    Service.belongsTo(models.SubPortfolio, { foreignKey: 'sub_portfolio_id', as: 'sub_portfolio' });
     Service.belongsTo(models.Unit, { foreignKey: 'sbu_owner_id', as: 'sbu_owner' });
     Service.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
     Service.belongsToMany(models.Sector, { through: 'service_sectors', as: 'sectors' });
     Service.belongsToMany(models.SubSector, { through: 'service_sub_sectors', as: 'sub_sectors' });
-    // Service.hasMany(models.MarketingKit, { foreignKey: 'service_id', as: 'marketing_kits' });
     Service.belongsToMany(models.MarketingKit, {
       through: 'marketing_kit_services',
       foreignKey: 'service_id',
       otherKey: 'marketing_kit_id',
       as: 'marketing_kits',
     });
-  };
+  }
 
   // Hook untuk generate kode jasa otomatis
   Service.beforeCreate(async (service, options) => {
