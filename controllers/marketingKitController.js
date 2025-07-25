@@ -162,9 +162,18 @@ exports.updateMarketingKit = async (req, res) => {
     // Update relasi many-to-many jika ada
     await marketingKit.setServices(service_ids);
 
-
     const updatedMarketingKit = await MarketingKit.findByPk(id, {
-      include: [{ model: Service, as: 'services' }],
+      include: [
+        {
+          model: Service,
+          as: 'services',
+          include: [
+            { model: Portfolio, as: 'portfolio' },
+            { model: SubPortfolio, as: 'sub_portfolio' },
+            { model: MarketingKit, as: 'marketing_kits' }
+          ]
+        }
+      ]
     });
 
     res.json({
