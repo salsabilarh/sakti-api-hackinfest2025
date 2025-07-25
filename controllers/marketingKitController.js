@@ -160,9 +160,8 @@ exports.updateMarketingKit = async (req, res) => {
     await marketingKit.save();
 
     // Update relasi many-to-many jika ada
-    if (service_ids.length > 0) {
-      await marketingKit.setServices(service_ids);
-    }
+    await marketingKit.setServices(service_ids);
+
 
     const updatedMarketingKit = await MarketingKit.findByPk(id, {
       include: [{ model: Service }],
