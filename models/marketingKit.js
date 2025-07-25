@@ -32,7 +32,10 @@ module.exports = (sequelize, DataTypes) => {
 
   MarketingKit.associate = (models) => {
     MarketingKit.belongsToMany(models.Service, {
-      through: 'marketing_kit_services',
+      through: {
+        model: 'marketing_kit_services',
+        timestamps: false,
+      },
       foreignKey: 'marketing_kit_id',
       otherKey: 'service_id',
       as: 'services',
