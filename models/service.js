@@ -58,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
     Service.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
     Service.belongsToMany(models.Sector, { through: 'service_sectors', as: 'sectors' });
     Service.belongsToMany(models.SubSector, { through: 'service_sub_sectors', as: 'sub_sectors' });
-    // Service.hasMany(models.MarketingKit, { foreignKey: 'service_id', as: 'marketing_kits' });
+    Service.hasMany(models.MarketingKit, { foreignKey: 'service_id', as: 'marketing_kits' });
     Service.belongsToMany(models.MarketingKit, {
       through: 'marketing_kit_services',
       foreignKey: 'service_id',
@@ -70,25 +70,25 @@ module.exports = (sequelize, DataTypes) => {
   // Hook untuk generate kode jasa otomatis
   Service.beforeCreate(async (service, options) => {
     if (!service.code) {
-      throw new Error('Kode jasa (service code) wajib diisi.');
+      const subPortfolio = await sequelize.models.SubPortfolio.findByPk(service.sub_portfolio_id);
+      if (!subPortfolio) {
+        throw new Error('Sub portfolio tidak ditemukan');
+      }
+
+      const lastService = await Service.findOne({
+        where: { sub_portfolio_id: service.sub_portfolio_id },
+        order: [['created_at', 'DESC']],
+      });
+
+      let nextChar = 'A';
+      if (lastService && lastService.code) {
+        const lastChar = lastService.code.charAt(lastService.code.length - 1);
+        nextChar = String.fromCharCode(lastChar.charCodeAt(0) + 1);
+      }
+
+      service.code = `${subPortfolio.code}${nextChar}`;
     }
-
-    // Ambil 4 karakter pertama dari kode jasa
-    const subPortfolioCode = service.code.slice(0, 4);
-
-    // Cari sub portfolio berdasarkan kode
-    const subPortfolio = await sequelize.models.SubPortfolio.findOne({
-      where: { code: subPortfolioCode },
-    });
-
-    if (!subPortfolio) {
-      throw new Error(`Sub portfolio dengan kode '${subPortfolioCode}' tidak ditemukan.`);
-    }
-
-    // Set sub_portfolio_id dari hasil pencarian
-    service.sub_portfolio_id = subPortfolio.id;
   });
-
 
   return Service;
 };
