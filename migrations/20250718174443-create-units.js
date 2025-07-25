@@ -10,12 +10,12 @@ module.exports = {
         defaultValue: Sequelize.UUIDV4,
       },
       name: {
-        type: Sequelize.STRING(30),
+        type: Sequelize.STRING(100),
         allowNull: false,
         unique: true,
       },
       type: {
-        type: Sequelize.ENUM('sbu', 'ppk', 'cabang'),
+        type: Sequelize.ENUM('sbu', 'ppk', 'cabang', 'unit', 'divisi', 'lainnya'),
         allowNull: false,
       },
       created_at: {
