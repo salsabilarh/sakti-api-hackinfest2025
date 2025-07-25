@@ -59,10 +59,7 @@ module.exports = (sequelize, DataTypes) => {
     Service.belongsToMany(models.Sector, { through: 'service_sectors', as: 'sectors' });
     Service.belongsToMany(models.SubSector, { through: 'service_sub_sectors', as: 'sub_sectors' });
     Service.belongsToMany(models.MarketingKit, {
-      through: {
-        model: 'marketing_kit_services',
-        timestamps: false,
-      },
+      through: models.MarketingKitService,
       foreignKey: 'service_id',
       otherKey: 'marketing_kit_id',
       as: 'marketing_kits',

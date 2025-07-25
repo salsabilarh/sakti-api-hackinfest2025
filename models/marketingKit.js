@@ -32,15 +32,12 @@ module.exports = (sequelize, DataTypes) => {
 
   MarketingKit.associate = (models) => {
     MarketingKit.belongsToMany(models.Service, {
-      through: {
-        model: 'marketing_kit_services',
-        timestamps: false,
-      },
+      through: models.MarketingKitService, // gunakan model pivot langsung
       foreignKey: 'marketing_kit_id',
       otherKey: 'service_id',
       as: 'services',
     });
-
+    
     MarketingKit.belongsTo(models.User, {
       foreignKey: 'uploaded_by',
       as: 'uploader',
