@@ -202,7 +202,6 @@ exports.createService = async (req, res) => {
   try {
     const {
       name,
-      code,
       group,
       intro_video_url,
       overview,
@@ -211,31 +210,15 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
+      sub_portfolio_id,
       sbu_owner_id,
       sectors,
       sub_sectors,
     } = req.body;
 
-    // Validasi bahwa kode harus ada
-    if (!code || typeof code !== 'string' || code.length < 4) {
-      return res.status(400).json({ error: 'Kode jasa (service code) minimal 4 karakter dan wajib diisi.' });
-    }
-
-    // Ambil 4 karakter awal dari kode untuk mendapatkan sub_portfolio
-    const subPortfolioCode = code.slice(0, 4);
-
-    const subPortfolio = await SubPortfolio.findOne({
-      where: { code: subPortfolioCode },
-    });
-
-    if (!subPortfolio) {
-      return res.status(400).json({ error: `Sub portfolio dengan kode '${subPortfolioCode}' tidak ditemukan.` });
-    }
-
     // Buat service baru
     const service = await Service.create({
       name,
-      code,
       group,
       intro_video_url,
       overview,
@@ -244,22 +227,22 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
-      sub_portfolio_id: subPortfolio.id, // diisi otomatis dari kode
+      sub_portfolio_id,
       sbu_owner_id,
       created_by: req.user.id,
     });
 
-    // Tambahkan relasi sektor jika ada
+    // Validasi dan tambahkan relasi sektor
     if (Array.isArray(sectors) && sectors.length > 0) {
       await service.addSectors(sectors);
     }
 
-    // Tambahkan relasi sub sektor jika ada
+    // Validasi dan tambahkan relasi sub sektor
     if (Array.isArray(sub_sectors) && sub_sectors.length > 0) {
       await service.addSub_sectors(sub_sectors);
     }
 
-    // Ambil data lengkap untuk response
+    // Dapatkan service dengan relasi yang lengkap untuk response
     const createdService = await Service.findByPk(service.id, {
       include: [
         {
@@ -304,7 +287,6 @@ exports.updateService = async (req, res) => {
     const { id } = req.params;
     const {
       name,
-      code,
       group,
       intro_video_url,
       overview,
@@ -312,7 +294,6 @@ exports.updateService = async (req, res) => {
       benefit,
       output,
       regulation_ref,
-      portfolio_id,
       sbu_owner_id,
       sectors,
       sub_sectors,
@@ -324,27 +305,9 @@ exports.updateService = async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    // Validasi bahwa kode harus ada
-    if (!code || typeof code !== 'string' || code.length < 4) {
-      return res.status(400).json({ error: 'Kode jasa (service code) minimal 4 karakter dan wajib diisi.' });
-    }
-
-    // Ambil 4 karakter awal dari kode jasa
-    const subPortfolioCode = code.slice(0, 4);
-
-    // Cari sub portfolio berdasarkan kode
-    const subPortfolio = await SubPortfolio.findOne({
-      where: { code: subPortfolioCode },
-    });
-
-    if (!subPortfolio) {
-      return res.status(400).json({ error: `Sub portfolio dengan kode '${subPortfolioCode}' tidak ditemukan.` });
-    }
-
-    // Update data service termasuk sub_portfolio_id
+    // Update data service
     await service.update({
       name,
-      code,
       group,
       intro_video_url,
       overview,
@@ -352,21 +315,19 @@ exports.updateService = async (req, res) => {
       benefit,
       output,
       regulation_ref,
-      portfolio_id,
-      sub_portfolio_id: subPortfolio.id,
       sbu_owner_id,
     });
 
-    // Update sektor dan sub sektor jika ada
-    if (Array.isArray(sectors)) {
+    // Update sectors dan sub_sectors jika ada
+    if (sectors) {
       await service.setSectors(sectors);
     }
 
-    if (Array.isArray(sub_sectors)) {
+    if (sub_sectors) {
       await service.setSub_sectors(sub_sectors);
     }
 
-    // Ambil data lengkap setelah update
+    // Dapatkan service yang sudah diupdate dengan relasi lengkap
     const updatedService = await Service.findByPk(id, {
       include: [
         {
