@@ -121,11 +121,6 @@ exports.createMarketingKit = async (req, res) => {
   }
 };
 
-const { MarketingKit, Service } = require('../models');
-const cloudinary = require('../config/cloudinary');
-const fs = require('fs');
-const path = require('path');
-
 exports.updateMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
