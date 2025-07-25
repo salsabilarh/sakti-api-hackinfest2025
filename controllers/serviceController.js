@@ -130,6 +130,7 @@ exports.getServiceById = async (req, res) => {
           model: MarketingKit,
           as: 'marketing_kits',
           attributes: ['id', 'name', 'file_type', 'created_at'],
+          through: { attributes: [] }, // ⛔️ Jangan ambil atribut dari pivot
         },
       ],
     });
