@@ -82,42 +82,34 @@ exports.getMarketingKitById = async (req, res) => {
 
 exports.createMarketingKit = async (req, res) => {
   try {
+    const { name, file_type, service_ids } = req.body;
     const file = req.file;
-    if (!file) {
-      return res.status(400).json({ message: 'No file uploaded.' });
+
+    if (!name || !file_type || !file || !service_ids || !service_ids.length) {
+      return res.status(400).json({ error: 'Semua field wajib diisi' });
     }
 
-    const serviceIds = req.body.service_ids;
-    if (!serviceIds || !Array.isArray(serviceIds)) {
-      return res.status(400).json({ message: 'service_ids must be an array' });
-    }
-
-    const uploadResult = await cloudinary.uploader.upload(file.path, {
+    const uploaded = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
-      resource_type: 'raw',
     });
 
-    fs.unlink(file.path, (err) => {
-      if (err) console.warn('Failed to delete local file:', err);
-    });
-
-    const newMarketingKit = await MarketingKit.create({
-      name: req.body.name || file.originalname,
-      file_path: uploadResult.secure_url,
-      cloudinary_public_id: uploadResult.public_id,
-      file_type: req.body.file_type,
+    const newKit = await MarketingKit.create({
+      name,
+      file_type,
+      file_path: uploaded.secure_url,
+      cloudinary_public_id: uploaded.public_id,
       uploaded_by: req.user.id,
     });
 
-    await newMarketingKit.setServices(serviceIds);
+    // Hubungkan ke service (many-to-many)
+    await newKit.setServices(service_ids);
 
-    return res.status(201).json({
-      message: 'Marketing kit uploaded successfully',
-      data: newMarketingKit,
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    return res.status(500).json({ message: 'Error uploading marketing kit' });
+    await unlinkFile(file.path); // hapus file lokal
+
+    res.status(201).json({ message: 'Berhasil unggah marketing kit', marketing_kit: newKit });
+  } catch (err) {
+    console.error('Error creating marketing kit:', err);
+    res.status(500).json({ error: 'Gagal unggah marketing kit' });
   }
 };
 
@@ -127,7 +119,6 @@ exports.updateMarketingKit = async (req, res) => {
     const { name, file_type } = req.body;
     let service_ids = req.body.service_ids || [];
 
-    // Normalize service_ids: handle if single value
     if (!Array.isArray(service_ids)) {
       service_ids = [service_ids];
     }
@@ -139,40 +130,40 @@ exports.updateMarketingKit = async (req, res) => {
       return res.status(404).json({ error: 'Marketing kit not found' });
     }
 
-    // Handle file update
+    // Jika ada file baru
     if (file) {
-      // Delete previous Cloudinary file if exists
+      // Hapus file lama di Cloudinary jika ada
       if (marketingKit.cloudinary_public_id) {
         await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
       }
 
-      // Upload new file
+      // Upload file baru ke Cloudinary
       const uploadResult = await cloudinary.uploader.upload(file.path, {
         folder: 'marketing_kits',
         resource_type: 'raw',
       });
 
-      // Delete temp file from local storage
+      // Hapus file dari local storage
       fs.unlink(file.path, (err) => {
         if (err) console.warn('Failed to delete local file:', err);
       });
 
+      // Update file_path dan public_id
       marketingKit.file_path = uploadResult.secure_url;
       marketingKit.cloudinary_public_id = uploadResult.public_id;
     }
 
-    // Update fields
+    // Update field lainnya
     marketingKit.name = name ?? marketingKit.name;
     marketingKit.file_type = file_type ?? marketingKit.file_type;
 
     await marketingKit.save();
 
-    // Update many-to-many relation
+    // Update relasi many-to-many jika ada
     if (service_ids.length > 0) {
       await marketingKit.setServices(service_ids);
     }
 
-    // Return updated marketing kit with services
     const updatedMarketingKit = await MarketingKit.findByPk(id, {
       include: [{ model: Service }],
     });
