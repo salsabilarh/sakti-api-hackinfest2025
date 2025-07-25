@@ -164,7 +164,7 @@ exports.updateMarketingKit = async (req, res) => {
 
 
     const updatedMarketingKit = await MarketingKit.findByPk(id, {
-      include: [{ model: Service }],
+      include: [{ model: Service, as: 'services' }],
     });
 
     res.json({
