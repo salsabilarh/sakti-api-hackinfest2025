@@ -6,6 +6,25 @@ const cloudinary = require('../config/cloudinary');
 const util = require('util');
 const unlinkFile = util.promisify(fs.unlink);
 
+// Logic terpisah untuk mendapatkan satu MarketingKit dengan relasi lengkap
+const getMarketingKitByIdLogic = async (id) => {
+  return await MarketingKit.findByPk(id, {
+    include: [
+      {
+        model: Service,
+        as: 'services',
+        attributes: ['id', 'name', 'code'],
+        through: { attributes: [] },
+      },
+      {
+        model: User,
+        as: 'uploader',
+        attributes: ['id', 'full_name', 'email'],
+      },
+    ],
+  });
+};
+
 exports.getAllMarketingKits = async (req, res) => {
   try {
     const { search, service, file_type } = req.query;
@@ -15,7 +34,8 @@ exports.getAllMarketingKits = async (req, res) => {
         model: Service,
         as: 'services',
         attributes: ['id', 'name', 'code'],
-        through: { attributes: [] }, // Jangan pakai `where` di sini
+        through: { attributes: [] },
+        ...(service ? { where: { id: service } } : {}),
       },
       {
         model: User,
@@ -35,12 +55,6 @@ exports.getAllMarketingKits = async (req, res) => {
       where.file_type = file_type;
     }
 
-    // 🛠 Tambahkan filter service di WHERE utama dengan subquery
-    if (service) {
-      include[0].required = true; // pastikan service ikut difilter
-      include[0].where = { id: service };
-    }
-
     const marketingKits = await MarketingKit.findAll({
       where,
       include,
@@ -58,21 +72,7 @@ exports.getMarketingKitById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const marketingKit = await MarketingKit.findByPk(id, {
-      include: [
-        {
-          model: Service,
-          as: 'services',
-          attributes: ['id', 'name', 'code'],
-          through: { attributes: [] },
-        },
-        {
-          model: User,
-          as: 'uploader',
-          attributes: ['id', 'full_name', 'email'],
-        },
-      ],
-    });
+    const marketingKit = await getMarketingKitByIdLogic(id);
 
     if (!marketingKit) {
       return res.status(404).json({ error: 'Marketing kit not found' });
@@ -167,19 +167,8 @@ exports.updateMarketingKit = async (req, res) => {
     // Update relasi many-to-many jika ada
     await marketingKit.setServices(service_ids);
 
-    const updatedMarketingKit = await MarketingKit.findByPk(id, {
-      include: [
-        {
-          model: Service,
-          as: 'services',
-          include: [
-            { model: Portfolio, as: 'portfolio' },
-            { model: SubPortfolio, as: 'sub_portfolio' },
-            { model: MarketingKit, as: 'marketing_kits' }
-          ]
-        }
-      ]
-    });
+    // Ambil data terbaru dengan relasi lengkap
+    const updatedMarketingKit = await getMarketingKitByIdLogic(id);
 
     res.json({
       message: 'Marketing kit updated successfully',
@@ -190,6 +179,7 @@ exports.updateMarketingKit = async (req, res) => {
     res.status(500).json({ error: 'Failed to update marketing kit' });
   }
 };
+
 
 exports.downloadMarketingKit = async (req, res) => {
   try {
