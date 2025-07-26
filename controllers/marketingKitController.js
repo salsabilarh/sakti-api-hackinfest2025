@@ -15,8 +15,7 @@ exports.getAllMarketingKits = async (req, res) => {
         model: Service,
         as: 'services',
         attributes: ['id', 'name', 'code'],
-        through: { attributes: [] },
-        ...(service ? { where: { id: service } } : {}),
+        through: { attributes: [] }, // Jangan pakai `where` di sini
       },
       {
         model: User,
@@ -34,6 +33,12 @@ exports.getAllMarketingKits = async (req, res) => {
 
     if (file_type) {
       where.file_type = file_type;
+    }
+
+    // 🛠 Tambahkan filter service di WHERE utama dengan subquery
+    if (service) {
+      include[0].required = true; // pastikan service ikut difilter
+      include[0].where = { id: service };
     }
 
     const marketingKits = await MarketingKit.findAll({
