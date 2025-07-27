@@ -44,7 +44,7 @@ exports.getAllServices = async (req, res) => {
       distinct: true
     });
 
-    const allowedSortFields = ['name', 'portfolio', 'sector'];
+   const allowedSortFields = ['name', 'portfolio', 'sector'];
     if (!allowedSortFields.includes(sort)) {
       return res.status(400).json({ error: 'Invalid sort field' });
     }
@@ -228,7 +228,6 @@ exports.getServiceById = async (req, res) => {
 exports.createService = async (req, res) => {
   try {
     const {
-      code,
       name,
       group,
       intro_video_url,
@@ -238,40 +237,14 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
+      sub_portfolio_id,
       sbu_owner_id,
       sectors,
       sub_sectors,
     } = req.body;
 
-    if (!code || code.length < 5) {
-      return res.status(400).json({ error: 'Kode jasa wajib diisi dan minimal 5 karakter (misalnya AEB-1A)' });
-    }
-
-    // Ambil 5 karakter pertama untuk kode sub-portfolio
-    const subPortfolioCode = code.substring(0, 5);
-
-    // Cek apakah sub-portfolio sudah ada
-    let subPortfolio = await SubPortfolio.findOne({
-      where: { code: subPortfolioCode },
-    });
-
-    // Jika belum ada, buat sub-portfolio baru
-    if (!subPortfolio) {
-      subPortfolio = await SubPortfolio.create({
-        code: subPortfolioCode,
-        name: subPortfolioCode, // Nama disamakan dengan kode
-        portfolio_id,
-        created_by: req.user.id,
-      });
-    }
-
-    if (!portfolio_id) {
-      return res.status(400).json({ error: 'Portfolio wajib dipilih' });
-    }
-
     // Buat service baru
     const service = await Service.create({
-      code,
       name,
       group,
       intro_video_url,
@@ -281,29 +254,51 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
-      sub_portfolio_id: subPortfolio.id, // tautkan ke sub portfolio yang sudah dicek/baru dibuat
+      sub_portfolio_id,
       sbu_owner_id,
       created_by: req.user.id,
     });
 
-    // Tambahkan relasi sektor jika ada
+    // Validasi dan tambahkan relasi sektor
     if (Array.isArray(sectors) && sectors.length > 0) {
       await service.addSectors(sectors);
     }
 
-    // Tambahkan relasi sub sektor jika ada
+    // Validasi dan tambahkan relasi sub sektor
     if (Array.isArray(sub_sectors) && sub_sectors.length > 0) {
       await service.addSub_sectors(sub_sectors);
     }
 
-    // Ambil service lengkap dengan relasinya untuk response
+    // Dapatkan service dengan relasi yang lengkap untuk response
     const createdService = await Service.findByPk(service.id, {
       include: [
-        { model: Portfolio, as: 'portfolio', attributes: ['id', 'name'] },
-        { model: SubPortfolio, as: 'sub_portfolio', attributes: ['id', 'name', 'code'] },
-        { model: Unit, as: 'sbu_owner', attributes: ['id', 'name'] },
-        { model: Sector, as: 'sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
-        { model: SubSector, as: 'sub_sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: SubPortfolio,
+          as: 'sub_portfolio',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: Unit,
+          as: 'sbu_owner',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+        {
+          model: SubSector,
+          as: 'sub_sectors',
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
       ],
     });
 
