@@ -237,7 +237,7 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
-      sub_portfolio_id,
+      sub_portfolio_name,
       sbu_owner_id,
       sectors,
       sub_sectors,
@@ -254,7 +254,7 @@ exports.createService = async (req, res) => {
       output,
       regulation_ref,
       portfolio_id,
-      sub_portfolio_id,
+      sub_portfolio_name,
       sbu_owner_id,
       created_by: req.user.id,
     });
