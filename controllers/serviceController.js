@@ -44,28 +44,15 @@ exports.getAllServices = async (req, res) => {
       distinct: true
     });
 
+    const allowedSortFields = ['name', 'portfolio'];
+    if (!allowedSortFields.includes(sort)) {
+      return res.status(400).json({ error: 'Invalid sort field' });
+    }
+
     let orderClause = [];
 
     if (sort === 'portfolio') {
       orderClause = [[{ model: Portfolio, as: 'portfolio' }, 'name', order]];
-    } else if (sort === 'subPortfolio') {
-      orderClause = [
-        [
-          Sequelize.literal(`CAST(REGEXP_REPLACE("sub_portfolio"."code", '[^0-9]', '', 'g') AS UNSIGNED)`),
-          order,
-        ],
-        [{ model: SubPortfolio, as: 'sub_portfolio' }, 'code', order]
-      ];
-    } else if (sort === 'sector') {
-      orderClause = [[{ model: Sector, as: 'sectors' }, 'code', order]];
-    } else if (sort === 'code') {
-      orderClause = [
-        [
-          Sequelize.literal(`CAST(REGEXP_REPLACE("Service"."code", '[^0-9]', '', 'g') AS UNSIGNED)`),
-          order,
-        ],
-        ['code', order] // fallback
-      ];
     } else {
       orderClause = [[sort, order]];
     }
@@ -97,11 +84,6 @@ exports.getAllServices = async (req, res) => {
       order: orderClause,
       attributes: ['id', 'name', 'code'],
     });
-
-    const allowedSortFields = ['name', 'code', 'portfolio', 'subPortfolio', 'sector'];
-    if (!allowedSortFields.includes(sort)) {
-      return res.status(400).json({ error: 'Invalid sort field' });
-    }
 
     // Format data
     const formatted = services.map(service => ({
