@@ -44,6 +44,18 @@ exports.getAllServices = async (req, res) => {
       distinct: true
     });
 
+    let orderClause = [];
+
+    if (sort === 'portfolio') {
+      orderClause = [[{ model: Portfolio, as: 'portfolio' }, 'name', order]];
+    } else if (sort === 'subPortfolio') {
+      orderClause = [[{ model: SubPortfolio, as: 'sub_portfolio' }, 'code', order]];
+    } else if (sort === 'sector') {
+      orderClause = [[{ model: Sector, as: 'sectors' }, 'code', order]];
+    } else {
+      orderClause = [[sort, order]];
+    }
+
     // Ambil data layanan
     const services = await Service.findAll({
       where,
@@ -68,9 +80,14 @@ exports.getAllServices = async (req, res) => {
       ],
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
+      order: orderClause,
       attributes: ['id', 'name', 'code'],
-      order: [[sort, order]],
     });
+
+    const allowedSortFields = ['name', 'code', 'portfolio', 'subPortfolio', 'sector'];
+    if (!allowedSortFields.includes(sort)) {
+      return res.status(400).json({ error: 'Invalid sort field' });
+    }
 
     // Format data
     const formatted = services.map(service => ({
