@@ -4,7 +4,7 @@ const xlsx = require('xlsx');
 
 exports.getAllServices = async (req, res) => {
   try {
-    const { search, portfolio, sector, page = 1, limit = 10 } = req.query;
+    const { search, portfolio, sector, page = 1, limit = 10, sort = 'name', order = 'asc' } = req.query;
     const where = {};
     const include = [];
 
@@ -69,6 +69,7 @@ exports.getAllServices = async (req, res) => {
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
       attributes: ['id', 'name', 'code'],
+      order: [[sort, order]],
     });
 
     // Format data
