@@ -1,4 +1,4 @@
-const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit } = require('../models');
+const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit, Sequelize } = require('../models');
 const { Op } = require('sequelize');
 const xlsx = require('xlsx');
 
