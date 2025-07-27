@@ -49,17 +49,22 @@ exports.getAllServices = async (req, res) => {
     if (sort === 'portfolio') {
       orderClause = [[{ model: Portfolio, as: 'portfolio' }, 'name', order]];
     } else if (sort === 'subPortfolio') {
-      orderClause = [[{ model: SubPortfolio, as: 'sub_portfolio' }, 'code', order]];
+      orderClause = [
+        [
+          Sequelize.literal(`CAST(REGEXP_REPLACE("sub_portfolio"."code", '[^0-9]', '', 'g') AS UNSIGNED)`),
+          order,
+        ],
+        [{ model: SubPortfolio, as: 'sub_portfolio' }, 'code', order]
+      ];
     } else if (sort === 'sector') {
       orderClause = [[{ model: Sector, as: 'sectors' }, 'code', order]];
     } else if (sort === 'code') {
-      // Sort berdasarkan padding angka agar "MIN-10A" > "MIN-3A"
       orderClause = [
         [
-          Sequelize.literal(`CAST(REGEXP_REPLACE(code, '[^0-9]', '', 'g') AS UNSIGNED)`),
-          order
+          Sequelize.literal(`CAST(REGEXP_REPLACE("Service"."code", '[^0-9]', '', 'g') AS UNSIGNED)`),
+          order,
         ],
-        ['code', order] // sebagai fallback jika numerik sama
+        ['code', order] // fallback
       ];
     } else {
       orderClause = [[sort, order]];
