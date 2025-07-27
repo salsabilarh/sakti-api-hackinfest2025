@@ -68,59 +68,14 @@ module.exports = (sequelize, DataTypes) => {
 
   // Hook untuk generate kode jasa otomatis
   Service.beforeCreate(async (service, options) => {
-    const { SubPortfolio } = sequelize.models;
-
-    // Pastikan input nama sub portfolio tersedia
-    if (!service.sub_portfolio_name || !service.portfolio_id) {
-      throw new Error('Sub portfolio name dan portfolio id harus disediakan');
-    }
-
-    // Cek apakah Sub Portfolio sudah ada berdasarkan nama & portfolio
-    let subPortfolio = await SubPortfolio.findOne({
-      where: {
-        name: service.sub_portfolio_name,
-        portfolio_id: service.portfolio_id,
-      }
-    });
-
-    // Jika belum ada, buat sub portfolio baru
-    if (!subPortfolio) {
-      // Generate kode untuk Sub Portfolio (misalnya: AEB-1, AEB-2, dst)
-      const existing = await SubPortfolio.findAll({
-        where: { portfolio_id: service.portfolio_id },
-        order: [['created_at', 'DESC']]
-      });
-
-      let nextNumber = 1;
-      if (existing.length > 0) {
-        const lastCode = existing[0].code;
-        const match = lastCode.match(/(\d+)$/);
-        if (match) {
-          nextNumber = parseInt(match[1], 10) + 1;
-        }
-      }
-
-      // Ambil prefix dari nama portfolio
-      const portfolio = await sequelize.models.Portfolio.findByPk(service.portfolio_id);
-      if (!portfolio) {
-        throw new Error('Portfolio tidak ditemukan');
-      }
-
-      const subPortfolioCode = `${portfolio.code}-${nextNumber}`;
-      subPortfolio = await SubPortfolio.create({
-        name: service.sub_portfolio_name,
-        code: subPortfolioCode,
-        portfolio_id: service.portfolio_id,
-      });
-    }
-
-    // Set sub_portfolio_id pada service
-    service.sub_portfolio_id = subPortfolio.id;
-
-    // Generate kode jasa
     if (!service.code) {
+      const subPortfolio = await sequelize.models.SubPortfolio.findByPk(service.sub_portfolio_id);
+      if (!subPortfolio) {
+        throw new Error('Sub portfolio tidak ditemukan');
+      }
+
       const lastService = await Service.findOne({
-        where: { sub_portfolio_id: subPortfolio.id },
+        where: { sub_portfolio_id: service.sub_portfolio_id },
         order: [['created_at', 'DESC']],
       });
 

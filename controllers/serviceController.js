@@ -44,7 +44,7 @@ exports.getAllServices = async (req, res) => {
       distinct: true
     });
 
-   const allowedSortFields = ['name', 'portfolio', 'sector'];
+    const allowedSortFields = ['name', 'portfolio', 'sector'];
     if (!allowedSortFields.includes(sort)) {
       return res.status(400).json({ error: 'Invalid sort field' });
     }
