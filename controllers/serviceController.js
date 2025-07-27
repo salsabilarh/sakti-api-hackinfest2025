@@ -44,15 +44,27 @@ exports.getAllServices = async (req, res) => {
       distinct: true
     });
 
-    const allowedSortFields = ['name', 'portfolio'];
+    const allowedSortFields = ['name', 'portfolio', 'sector'];
     if (!allowedSortFields.includes(sort)) {
       return res.status(400).json({ error: 'Invalid sort field' });
     }
 
     let orderClause = [];
 
+    // Sorting relasi
     if (sort === 'portfolio') {
       orderClause = [[{ model: Portfolio, as: 'portfolio' }, 'name', order]];
+    } else if (sort === 'sector') {
+      // Tambahkan sektor jika belum ada di include
+      if (!include.find((inc) => inc.as === 'sectors')) {
+        include.push({
+          model: Sector,
+          as: 'sectors',
+          attributes: [],
+          through: { attributes: [] },
+        });
+      }
+      orderClause = [[{ model: Sector, as: 'sectors' }, 'code', order]];
     } else {
       orderClause = [[sort, order]];
     }
