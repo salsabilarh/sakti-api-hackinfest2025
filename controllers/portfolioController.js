@@ -105,6 +105,52 @@ exports.deletePortfolio = async (req, res) => {
   }
 };
 
+// Mendapatkan semua sub portfolio beserta portfolio induknya
+exports.getAllSubPortfolios = async (req, res) => {
+  try {
+    const subPortfolios = await SubPortfolio.findAll({
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['code', 'ASC']],
+    });
+
+    res.json({ sub_portfolios: subPortfolios });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sub portfolios' });
+  }
+};
+
+exports.getSubPortfolioById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const subPortfolio = await SubPortfolio.findByPk(id, {
+      include: [
+        {
+          model: Portfolio,
+          as: 'portfolio',
+          attributes: ['id', 'name'],
+        },
+      ],
+    });
+
+    if (!subPortfolio) {
+      return res.status(404).json({ error: 'Sub portfolio not found' });
+    }
+
+    res.json({ sub_portfolio: subPortfolio });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sub portfolio details' });
+  }
+};
+
 exports.createSubPortfolio = async (req, res) => {
   try {
     const { portfolio_id } = req.params;

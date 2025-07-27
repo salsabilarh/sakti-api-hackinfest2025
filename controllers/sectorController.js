@@ -107,6 +107,53 @@ exports.deleteSector = async (req, res) => {
   }
 };
 
+// Mendapatkan semua sub sektor
+exports.getAllSubSectors = async (req, res) => {
+  try {
+    const subSectors = await SubSector.findAll({
+      include: [
+        {
+          model: Sector,
+          as: 'sector',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['code', 'ASC']],
+    });
+
+    res.json({ sub_sectors: subSectors });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sub sectors' });
+  }
+};
+
+// Mendapatkan detail sub sektor berdasarkan ID
+exports.getSubSectorById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const subSector = await SubSector.findByPk(id, {
+      include: [
+        {
+          model: Sector,
+          as: 'sector',
+          attributes: ['id', 'name'],
+        },
+      ],
+    });
+
+    if (!subSector) {
+      return res.status(404).json({ error: 'Sub sector not found' });
+    }
+
+    res.json({ sub_sector: subSector });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to get sub sector details' });
+  }
+};
+
 exports.createSubSector = async (req, res) => {
   try {
     const { sector_id } = req.params;

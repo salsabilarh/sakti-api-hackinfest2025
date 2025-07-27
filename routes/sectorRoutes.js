@@ -18,6 +18,17 @@ router.put('/:id', authMiddleware.authenticate, accessControl, sectorController.
 router.delete('/:id', authMiddleware.authenticate, accessControl, sectorController.deleteSector);
 
 // Sub sector routes
+router.get(
+  '/sub-sectors',
+  authMiddleware.authenticate,
+  sectorController.getAllSubSectors
+);
+router.get(
+  '/sub-sectors/:id',
+  authMiddleware.authenticate,
+  sectorController.getSubSectorById
+);
+
 router.post(
   '/:sector_id/sub-sectors',
   authMiddleware.authenticate,

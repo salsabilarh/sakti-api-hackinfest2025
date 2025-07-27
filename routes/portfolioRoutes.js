@@ -18,6 +18,17 @@ router.put('/:id', authMiddleware.authenticate, accessControl, portfolioControll
 router.delete('/:id', authMiddleware.authenticate, accessControl, portfolioController.deletePortfolio);
 
 // Sub portfolio routes
+router.get('/sub-portfolios',
+  authMiddleware.authenticate,
+  accessControl,
+  portfolioController.getAllSubPortfolios
+);
+router.get('/sub-portfolios/:id',
+  authMiddleware.authenticate,
+  accessControl,
+  portfolioController.getSubPortfolioById
+);
+
 router.post(
   '/:portfolio_id/sub-portfolios',
   authMiddleware.authenticate,
