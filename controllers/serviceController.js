@@ -265,6 +265,10 @@ exports.createService = async (req, res) => {
       });
     }
 
+    if (!portfolio_id) {
+      return res.status(400).json({ error: 'Portfolio wajib dipilih' });
+    }
+
     // Buat service baru
     const service = await Service.create({
       code,
