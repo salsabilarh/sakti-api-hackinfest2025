@@ -243,6 +243,12 @@ exports.createService = async (req, res) => {
       sub_sectors,
     } = req.body;
 
+    // Cek apakah nama service sudah ada
+    const existingService = await Service.findOne({ where: { name, portfolio_id } });
+    if (existingService) {
+      return res.status(400).json({ error: 'Nama layanan sudah digunakan. Silakan gunakan nama lain.' });
+    }
+
     // Buat service baru
     const service = await Service.create({
       name,
@@ -259,53 +265,30 @@ exports.createService = async (req, res) => {
       created_by: req.user.id,
     });
 
-    // Validasi dan tambahkan relasi sektor
+    // Tambahkan relasi sektor & sub sektor
     if (Array.isArray(sectors) && sectors.length > 0) {
       await service.addSectors(sectors);
     }
 
-    // Validasi dan tambahkan relasi sub sektor
     if (Array.isArray(sub_sectors) && sub_sectors.length > 0) {
       await service.addSub_sectors(sub_sectors);
     }
 
-    // Dapatkan service dengan relasi yang lengkap untuk response
+    // Ambil kembali data lengkap
     const createdService = await Service.findByPk(service.id, {
       include: [
-        {
-          model: Portfolio,
-          as: 'portfolio',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: SubPortfolio,
-          as: 'sub_portfolio',
-          attributes: ['id', 'name', 'code'],
-        },
-        {
-          model: Unit,
-          as: 'sbu_owner',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: Sector,
-          as: 'sectors',
-          attributes: ['id', 'name', 'code'],
-          through: { attributes: [] },
-        },
-        {
-          model: SubSector,
-          as: 'sub_sectors',
-          attributes: ['id', 'name', 'code'],
-          through: { attributes: [] },
-        },
+        { model: Portfolio, as: 'portfolio', attributes: ['id', 'name'] },
+        { model: SubPortfolio, as: 'sub_portfolio', attributes: ['id', 'name', 'code'] },
+        { model: Unit, as: 'sbu_owner', attributes: ['id', 'name'] },
+        { model: Sector, as: 'sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
+        { model: SubSector, as: 'sub_sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
       ],
     });
 
     res.status(201).json({ service: createdService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create service' });
+    res.status(500).json({ error: 'Gagal membuat layanan' });
   }
 };
 
@@ -326,13 +309,22 @@ exports.updateService = async (req, res) => {
       sub_sectors,
     } = req.body;
 
-    // Cari service berdasarkan ID
     const service = await Service.findByPk(id);
     if (!service) {
-      return res.status(404).json({ error: 'Service not found' });
+      return res.status(404).json({ error: 'Layanan tidak ditemukan' });
     }
 
-    // Update data service
+    // Cek jika nama yang baru bentrok dengan layanan lain
+    if (name && name !== service.name) {
+      const duplicate = await Service.findOne({
+        where: { name, portfolio_id },
+      });
+      if (duplicate && duplicate.id !== service.id) {
+        return res.status(400).json({ error: 'Nama layanan sudah digunakan oleh layanan lain.' });
+      }
+    }
+
+    // Update data utama
     await service.update({
       name,
       group,
@@ -345,52 +337,24 @@ exports.updateService = async (req, res) => {
       sbu_owner_id,
     });
 
-    // Update sectors dan sub_sectors jika ada
-    if (sectors) {
-      await service.setSectors(sectors);
-    }
+    // Update relasi
+    if (sectors) await service.setSectors(sectors);
+    if (sub_sectors) await service.setSub_sectors(sub_sectors);
 
-    if (sub_sectors) {
-      await service.setSub_sectors(sub_sectors);
-    }
-
-    // Dapatkan service yang sudah diupdate dengan relasi lengkap
     const updatedService = await Service.findByPk(id, {
       include: [
-        {
-          model: Portfolio,
-          as: 'portfolio',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: SubPortfolio,
-          as: 'sub_portfolio',
-          attributes: ['id', 'name', 'code'],
-        },
-        {
-          model: Unit,
-          as: 'sbu_owner',
-          attributes: ['id', 'name'],
-        },
-        {
-          model: Sector,
-          as: 'sectors',
-          attributes: ['id', 'name', 'code'],
-          through: { attributes: [] },
-        },
-        {
-          model: SubSector,
-          as: 'sub_sectors',
-          attributes: ['id', 'name', 'code'],
-          through: { attributes: [] },
-        },
+        { model: Portfolio, as: 'portfolio', attributes: ['id', 'name'] },
+        { model: SubPortfolio, as: 'sub_portfolio', attributes: ['id', 'name', 'code'] },
+        { model: Unit, as: 'sbu_owner', attributes: ['id', 'name'] },
+        { model: Sector, as: 'sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
+        { model: SubSector, as: 'sub_sectors', attributes: ['id', 'name', 'code'], through: { attributes: [] } },
       ],
     });
 
     res.json({ service: updatedService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to update service' });
+    res.status(500).json({ error: 'Gagal memperbarui layanan' });
   }
 };
 
