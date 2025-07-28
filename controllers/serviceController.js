@@ -244,9 +244,9 @@ exports.createService = async (req, res) => {
     } = req.body;
 
     // Cek apakah nama service sudah ada
-    const existingService = await Service.findOne({ where: { name, portfolio_id } });
+    const existingService = await Service.findOne({ where: { name } });
     if (existingService) {
-      return res.status(400).json({ error: 'Nama layanan sudah digunakan. Silakan gunakan nama lain.' });
+      return res.status(400).json({ error: 'Nama layanan sudah digunakan' });
     }
 
     // Buat service baru
@@ -288,7 +288,7 @@ exports.createService = async (req, res) => {
     res.status(201).json({ service: createdService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Gagal membuat layanan' });
+    res.status(500).json({ msg: 'Gagal membuat layanan', error });
   }
 };
 
@@ -317,7 +317,7 @@ exports.updateService = async (req, res) => {
     // Cek jika nama yang baru bentrok dengan layanan lain
     if (name && name !== service.name) {
       const duplicate = await Service.findOne({
-        where: { name, portfolio_id },
+        where: { name },
       });
       if (duplicate && duplicate.id !== service.id) {
         return res.status(400).json({ error: 'Nama layanan sudah digunakan oleh layanan lain.' });
@@ -354,7 +354,7 @@ exports.updateService = async (req, res) => {
     res.json({ service: updatedService });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Gagal memperbarui layanan' });
+    res.status(500).json({ msg: 'Gagal memperbarui layanan', error });
   }
 };
 
