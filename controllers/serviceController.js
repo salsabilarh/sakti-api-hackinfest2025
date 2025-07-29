@@ -158,6 +158,11 @@ exports.getServiceById = async (req, res) => {
           attributes: ['id', 'name', 'file_type', 'created_at'],
           through: { attributes: [] }, // ⛔️ Jangan ambil atribut dari pivot
         },
+        {
+          model: ServiceCustomer,
+          as: 'customers',
+          attributes: ['id', 'unit_name', 'customer_name', 'revenue'],
+        }
       ],
     });
 
@@ -375,5 +380,24 @@ exports.deleteService = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to delete service' });
+  }
+};
+
+exports.addCustomerToService = async (req, res) => {
+  try {
+    const { id: service_id } = req.params;
+    const { unit_name, customer_name, revenue } = req.body;
+
+    const newCustomer = await ServiceCustomer.create({
+      service_id,
+      unit_name,
+      customer_name,
+      revenue,
+    });
+
+    res.status(201).json({ customer: newCustomer });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to add customer to service' });
   }
 };

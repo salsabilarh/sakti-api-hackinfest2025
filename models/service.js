@@ -64,6 +64,10 @@ module.exports = (sequelize, DataTypes) => {
       otherKey: 'marketing_kit_id',
       as: 'marketing_kits',
     });
+    Service.hasMany(models.ServiceCustomer, {
+      foreignKey: 'service_id',
+      as: 'customers',
+    });
   };
 
   // Hook untuk generate kode jasa otomatis
