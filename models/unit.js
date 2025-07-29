@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
   Unit.associate = (models) => {
     Unit.hasMany(models.User, { foreignKey: 'unit_kerja_id', as: 'users' });
     Unit.hasMany(models.Service, { foreignKey: 'sbu_owner_id', as: 'owned_services' });
+    Unit.hasMany(models.ServiceRevenue, { foreignKey: 'unit_id', as: 'revenues' });
   };
 
   return Unit;

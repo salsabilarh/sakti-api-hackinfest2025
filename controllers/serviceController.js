@@ -179,6 +179,7 @@ exports.getServiceById = async (req, res) => {
 
     res.json({ service });
   } catch (error) {
+    console.error('Error getting service details:', error); // ✅ Tambahkan log
     res.status(500).json({ error: 'Failed to get service details' });
   }
 };
