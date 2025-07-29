@@ -177,9 +177,14 @@ exports.getServiceById = async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
+    // Urutkan revenues berdasarkan revenue tertinggi
+    if (service.revenues && Array.isArray(service.revenues)) {
+      service.revenues.sort((a, b) => parseFloat(b.revenue) - parseFloat(a.revenue));
+    }
+
     res.json({ service });
   } catch (error) {
-    console.error('Error getting service details:', error); // ✅ Tambahkan log
+    console.error('Error getting service details:', error);
     res.status(500).json({ error: 'Failed to get service details' });
   }
 };
