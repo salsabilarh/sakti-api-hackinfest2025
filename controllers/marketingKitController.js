@@ -90,12 +90,25 @@ exports.createMarketingKit = async (req, res) => {
     const { name, file_type, service_ids } = req.body;
     const file = req.file;
 
-    if (!name || !file_type || !file || !service_ids || !service_ids.length) {
-      return res.status(400).json({ error: 'Semua field wajib diisi' });
+    if (!name) {
+      return res.status(400).json({ error: 'Nama file wajib diisi' });
+    }
+
+    if (!file_type) {
+      return res.status(400).json({ error: 'Tipe file wajib dipilih' });
+    }
+
+    if (!file) {
+      return res.status(400).json({ error: 'File harus diunggah' });
+    }
+
+    if (!service_ids || !service_ids.length) {
+      return res.status(400).json({ error: 'Minimal satu layanan harus dipilih' });
     }
 
     const uploaded = await cloudinary.uploader.upload(file.path, {
       folder: 'marketing_kits',
+      resource_type: 'raw',
     });
 
     const newKit = await MarketingKit.create({
@@ -106,15 +119,20 @@ exports.createMarketingKit = async (req, res) => {
       uploaded_by: req.user.id,
     });
 
-    // Hubungkan ke service (many-to-many)
     await newKit.setServices(service_ids);
 
-    await unlinkFile(file.path); // hapus file lokal
+    await unlinkFile(file.path); // Hapus file lokal setelah upload sukses
 
-    res.status(201).json({ message: 'Berhasil unggah marketing kit', marketing_kit: newKit });
+    res.status(201).json({
+      message: 'Berhasil mengunggah marketing kit',
+      marketing_kit: newKit,
+    });
   } catch (err) {
-    console.error('Error creating marketing kit:', err);
-    res.status(500).json({ error: 'Gagal unggah marketing kit' });
+    console.error('Gagal membuat marketing kit:', err);
+    res.status(500).json({
+      error: 'Terjadi kesalahan saat mengunggah marketing kit. Silakan coba lagi.',
+      details: err.message,
+    });
   }
 };
 
@@ -132,54 +150,57 @@ exports.updateMarketingKit = async (req, res) => {
 
     const marketingKit = await MarketingKit.findByPk(id);
     if (!marketingKit) {
-      return res.status(404).json({ error: 'Marketing kit not found' });
+      return res.status(404).json({ error: 'Marketing kit tidak ditemukan' });
     }
 
     // Jika ada file baru
     if (file) {
-      // Hapus file lama di Cloudinary jika ada
-      if (marketingKit.cloudinary_public_id) {
-        await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
+      try {
+        if (marketingKit.cloudinary_public_id) {
+          await cloudinary.uploader.destroy(marketingKit.cloudinary_public_id);
+        }
+
+        const uploadResult = await cloudinary.uploader.upload(file.path, {
+          folder: 'marketing_kits',
+          resource_type: 'raw',
+        });
+
+        fs.unlink(file.path, (err) => {
+          if (err) console.warn('Gagal menghapus file lokal:', err);
+        });
+
+        marketingKit.file_path = uploadResult.secure_url;
+        marketingKit.cloudinary_public_id = uploadResult.public_id;
+      } catch (err) {
+        console.error('Gagal upload file baru:', err);
+        return res.status(500).json({
+          error: 'Gagal mengunggah file baru ke Cloudinary',
+          details: err.message,
+        });
       }
-
-      // Upload file baru ke Cloudinary
-      const uploadResult = await cloudinary.uploader.upload(file.path, {
-        folder: 'marketing_kits',
-        resource_type: 'raw',
-      });
-
-      // Hapus file dari local storage
-      fs.unlink(file.path, (err) => {
-        if (err) console.warn('Failed to delete local file:', err);
-      });
-
-      // Update file_path dan public_id
-      marketingKit.file_path = uploadResult.secure_url;
-      marketingKit.cloudinary_public_id = uploadResult.public_id;
     }
 
-    // Update field lainnya
     marketingKit.name = name ?? marketingKit.name;
     marketingKit.file_type = file_type ?? marketingKit.file_type;
 
     await marketingKit.save();
 
-    // Update relasi many-to-many jika ada
     await marketingKit.setServices(service_ids);
 
-    // Ambil data terbaru dengan relasi lengkap
     const updatedMarketingKit = await getMarketingKitByIdLogic(id);
 
     res.json({
-      message: 'Marketing kit updated successfully',
+      message: 'Marketing kit berhasil diperbarui',
       marketing_kit: updatedMarketingKit,
     });
   } catch (error) {
-    console.error('Update error:', error);
-    res.status(500).json({ error: 'Failed to update marketing kit' });
+    console.error('Gagal memperbarui marketing kit:', error);
+    res.status(500).json({
+      error: 'Terjadi kesalahan saat memperbarui marketing kit',
+      details: error.message,
+    });
   }
 };
-
 
 exports.downloadMarketingKit = async (req, res) => {
   try {
