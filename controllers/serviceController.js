@@ -1,4 +1,4 @@
-const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit, Sequelize } = require('../models');
+const { Service, Portfolio, SubPortfolio, Unit, Sector, SubSector, MarketingKit, Sequelize, ServiceRevenue } = require('../models');
 const { Op } = require('sequelize');
 const xlsx = require('xlsx');
 
@@ -156,13 +156,20 @@ exports.getServiceById = async (req, res) => {
           model: MarketingKit,
           as: 'marketing_kits',
           attributes: ['id', 'name', 'file_type', 'created_at'],
-          through: { attributes: [] }, // ⛔️ Jangan ambil atribut dari pivot
+          through: { attributes: [] },
         },
         {
-          model: ServiceCustomer,
-          as: 'customers',
-          attributes: ['id', 'unit_name', 'customer_name', 'revenue'],
-        }
+          model: ServiceRevenue,
+          as: 'revenues',
+          attributes: ['id', 'customer_name', 'revenue', 'year', 'month'],
+          include: [
+            {
+              model: Unit,
+              as: 'unit',
+              attributes: ['id', 'name'],
+            },
+          ],
+        },
       ],
     });
 
@@ -172,7 +179,6 @@ exports.getServiceById = async (req, res) => {
 
     res.json({ service });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to get service details' });
   }
 };
@@ -383,21 +389,40 @@ exports.deleteService = async (req, res) => {
   }
 };
 
-exports.addCustomerToService = async (req, res) => {
+exports.addServiceRevenue = async (req, res) => {
   try {
     const { id: service_id } = req.params;
-    const { unit_name, customer_name, revenue } = req.body;
+    const { customer_name, revenue, unit_id, year, month } = req.body;
 
-    const newCustomer = await ServiceCustomer.create({
+    // Validasi wajib isi
+    if (!customer_name || !revenue || !unit_id || !year || !month) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+
+    // Validasi: pastikan service dan unit ada
+    const service = await Service.findByPk(service_id);
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found.' });
+    }
+
+    const unit = await Unit.findByPk(unit_id);
+    if (!unit) {
+      return res.status(404).json({ error: 'Unit not found.' });
+    }
+
+    // Tambahkan revenue
+    const newRevenue = await ServiceRevenue.create({
       service_id,
-      unit_name,
       customer_name,
       revenue,
+      unit_id,
+      year,
+      month,
     });
 
-    res.status(201).json({ customer: newCustomer });
+    res.status(201).json({ message: 'Revenue added successfully.', data: newRevenue });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to add customer to service' });
+    res.status(500).json({ error: 'Failed to add service revenue.' });
   }
 };

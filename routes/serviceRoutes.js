@@ -41,7 +41,13 @@ router.delete(
   serviceController.deleteService
 );
 
-router.get('/:id/customers', authMiddleware.authenticate, serviceController.getServiceById);
-router.post('/:id/customers', authMiddleware.authenticate, serviceController.addCustomerToService);
+router.get('/:id/revenue', authMiddleware.authenticate, serviceController.getServiceById);
+
+router.post(
+  '/',
+  authMiddleware.authenticate,
+  authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
+  serviceController.addServiceRevenue
+);
 
 module.exports = router;
