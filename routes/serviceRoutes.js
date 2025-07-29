@@ -41,8 +41,6 @@ router.delete(
   serviceController.deleteService
 );
 
-router.get('/:id/revenue', authMiddleware.authenticate, serviceController.getServiceById);
-
 router.post(
   '/',
   authMiddleware.authenticate,
