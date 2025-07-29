@@ -161,7 +161,7 @@ exports.getServiceById = async (req, res) => {
         {
           model: ServiceRevenue,
           as: 'revenues',
-          attributes: ['id', 'customer_name', 'revenue', 'year', 'month'],
+          attributes: ['id', 'customer_name', 'revenue'],
           include: [
             {
               model: Unit,
@@ -393,10 +393,10 @@ exports.deleteService = async (req, res) => {
 exports.addServiceRevenue = async (req, res) => {
   try {
     const { id: service_id } = req.params;
-    const { customer_name, revenue, unit_id, year, month } = req.body;
+    const { customer_name, revenue, unit_id } = req.body;
 
     // Validasi wajib isi
-    if (!customer_name || !revenue || !unit_id || !year || !month) {
+    if (!customer_name || !revenue || !unit_id) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
 
@@ -416,9 +416,7 @@ exports.addServiceRevenue = async (req, res) => {
       service_id,
       customer_name,
       revenue,
-      unit_id,
-      year,
-      month,
+      unit_id
     });
 
     res.status(201).json({ message: 'Revenue added successfully.', data: newRevenue });
