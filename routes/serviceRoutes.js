@@ -41,4 +41,7 @@ router.delete(
   serviceController.deleteService
 );
 
+router.get('/:id/customers', authMiddleware.authenticate, serviceController.getServiceById);
+router.post('/:id/customers', authMiddleware.authenticate, serviceController.addCustomerToService);
+
 module.exports = router;
