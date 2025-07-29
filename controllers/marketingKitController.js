@@ -135,7 +135,6 @@ exports.createMarketingKit = async (req, res) => {
       marketing_kit: newKit,
     });
   } catch (err) {
-    console.error('Gagal membuat marketing kit:', err);
     if (err.http_code === 413) {
       return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum Cloudinary (100 MB)' });
     }
@@ -189,10 +188,10 @@ exports.updateMarketingKit = async (req, res) => {
       } catch (err) {
         console.error('Gagal upload file baru:', err);
         if (err.http_code === 413) {
-          return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum Cloudinary (100 MB)' });
+          return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum (100 MB)' });
         }
         return res.status(500).json({
-          error: 'Gagal mengunggah file baru ke Cloudinary',
+          error: 'Gagal mengunggah file baru',
           details: err.message,
         });
       }
