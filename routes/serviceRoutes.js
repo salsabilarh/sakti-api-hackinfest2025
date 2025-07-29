@@ -42,7 +42,7 @@ router.delete(
 );
 
 router.post(
-  '/revenue',
+  '/id/revenue',
   authMiddleware.authenticate,
   authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
   serviceController.addServiceRevenue
