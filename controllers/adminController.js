@@ -697,8 +697,8 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Jika role adalah admin atau viewer, maka unit_kerja_id diset null
-    if (role === 'admin' || role === 'viewer') {
+    // Jika role adalah admin, maka unit_kerja_id diset null
+    if (role === 'admin') {
       unit_kerja_id = null;
     }
 
