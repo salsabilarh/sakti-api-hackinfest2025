@@ -6,8 +6,6 @@ const cloudinary = require('../config/cloudinary');
 const util = require('util');
 const unlinkFile = util.promisify(fs.unlink);
 
-const MAX_FILE_SIZE_MB = 100;
-
 // Logic terpisah untuk mendapatkan satu MarketingKit dengan relasi lengkap
 const getMarketingKitByIdLogic = async (id) => {
   return await MarketingKit.findByPk(id, {
@@ -110,7 +108,7 @@ exports.createMarketingKit = async (req, res) => {
 
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > MAX_FILE_SIZE_MB) {
-      return res.status(400).json({ error: `Ukuran file maksimal ${MAX_FILE_SIZE_MB} MB` });
+      return res.status(400).json({ error: `Ukuran file maksimal 10 MB` });
     }
 
     const uploaded = await cloudinary.uploader.upload(file.path, {
@@ -136,7 +134,7 @@ exports.createMarketingKit = async (req, res) => {
     });
   } catch (err) {
     if (err.http_code === 413) {
-      return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum Cloudinary (100 MB)' });
+      return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum (10 MB)' });
     }
     res.status(500).json({
       error: 'Terjadi kesalahan saat mengunggah marketing kit. Silakan coba lagi.',
