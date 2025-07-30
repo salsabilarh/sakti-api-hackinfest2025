@@ -576,11 +576,11 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    if (role !== 'viewer' && role !== 'admin') {
+    if (role !== 'admin') {
       if (!unit_kerja_id) {
         return res.status(400).json({
           success: false,
-          message: 'Unit kerja wajib diisi untuk role selain admin dan viewer',
+          message: 'Unit kerja wajib diisi untuk role selain admin',
         });
       }
 
@@ -611,7 +611,7 @@ exports.createUser = async (req, res) => {
       email,
       password: hashedPassword,
       role,
-      unit_kerja_id: (role === 'admin' || role === 'viewer') ? null : unit_kerja_id,
+      unit_kerja_id: role === 'admin' ? null : unit_kerja_id,
       is_active: true,
       is_verified: true,
       temporary_password: encryptedTempPassword
