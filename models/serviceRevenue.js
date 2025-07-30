@@ -2,10 +2,9 @@
 module.exports = (sequelize, DataTypes) => {
   const ServiceRevenue = sequelize.define('ServiceRevenue', {
     id: {
-    type: Sequelize.CHAR(36),
-    allowNull: false,
-    primaryKey: true,
-    defaultValue: Sequelize.literal('(UUID())'), // gunakan literal UUID()
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
     },
     customer_name: {
       type: DataTypes.STRING(255),
