@@ -1,10 +1,70 @@
-const { MarketingKit, Service, User, DownloadLog, Portfolio, SubPortfolio } = require('../models');
-const fs = require('fs');
+const { MarketingKit, Service, User, DownloadLog, Portfolio, SubPortfolio, Sequelize } = require('../models');
+const fs = require('fs').promises;
 const path = require('path');
 const { Op } = require('sequelize');
 const cloudinary = require('../config/cloudinary');
 const util = require('util');
 const unlinkFile = util.promisify(fs.unlink);
+// const cloudinary = require('cloudinary').v2;
+
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// MIME/ekstensi yang diizinkan
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+]);
+const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.ppt', '.pptx']);
+
+function normalizeServiceIds(input) {
+  if (!input) return [];
+  // Bisa datang sebagai array dari form-data: service_ids[]=a, service_ids[]=b
+  if (Array.isArray(input)) return [...new Set(input.map(String))];
+  // Bisa datang sebagai string tunggal: "id"
+  if (typeof input === 'string') {
+    const s = input.trim();
+    // Bisa jadi JSON string: '["a","b"]'
+    if ((s.startsWith('[') && s.endsWith(']')) || (s.startsWith('"') && s.endsWith('"'))) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return [...new Set(parsed.map(String))];
+        return parsed ? [String(parsed)] : [];
+      } catch {
+        // fallback
+      }
+    }
+    // Bisa juga comma-separated: "a,b,c"
+    if (s.includes(',')) return [...new Set(s.split(',').map(v => v.trim()).filter(Boolean))];
+    return [s];
+  }
+  // Fallback
+  return [];
+}
+
+function isAllowedFile(file) {
+  if (!file) return false;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const byMime = file.mimetype ? ALLOWED_MIME.has(file.mimetype) : false;
+  const byExt = ext ? ALLOWED_EXT.has(ext) : false;
+  // Terima jika salah satu cocok (beberapa browser memberi mimetype octet-stream)
+  return byMime || byExt;
+}
+
+async function safeUnlink(p) {
+  if (!p) return;
+  try { await fs.unlink(p); } catch (_) { /* ignore */ }
+}
+
+function ensureCloudinaryConfigured() {
+  // Minimal cek via env CLOUDINARY_URL atau trio kredensial
+  const hasUrl = !!process.env.CLOUDINARY_URL;
+  const hasTriplet = !!(cloudinary.config().cloud_name && cloudinary.config().api_key && cloudinary.config().api_secret);
+  return hasUrl || hasTriplet;
+}
 
 // Logic terpisah untuk mendapatkan satu MarketingKit dengan relasi lengkap
 const getMarketingKitByIdLogic = async (id) => {
@@ -84,71 +144,6 @@ exports.getMarketingKitById = async (req, res) => {
     res.status(500).json({ error: 'Failed to get marketing kit details' });
   }
 };
-
-// controllers/marketingKitController.js
-const fs = require('fs').promises;
-const path = require('path');
-const { MarketingKit, Service, sequelize } = require('../models');
-const cloudinary = require('cloudinary').v2;
-
-const MAX_FILE_SIZE_MB = 10;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-
-// MIME/ekstensi yang diizinkan
-const ALLOWED_MIME = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
-]);
-const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.ppt', '.pptx']);
-
-function normalizeServiceIds(input) {
-  if (!input) return [];
-  // Bisa datang sebagai array dari form-data: service_ids[]=a, service_ids[]=b
-  if (Array.isArray(input)) return [...new Set(input.map(String))];
-  // Bisa datang sebagai string tunggal: "id"
-  if (typeof input === 'string') {
-    const s = input.trim();
-    // Bisa jadi JSON string: '["a","b"]'
-    if ((s.startsWith('[') && s.endsWith(']')) || (s.startsWith('"') && s.endsWith('"'))) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) return [...new Set(parsed.map(String))];
-        return parsed ? [String(parsed)] : [];
-      } catch {
-        // fallback
-      }
-    }
-    // Bisa juga comma-separated: "a,b,c"
-    if (s.includes(',')) return [...new Set(s.split(',').map(v => v.trim()).filter(Boolean))];
-    return [s];
-  }
-  // Fallback
-  return [];
-}
-
-function isAllowedFile(file) {
-  if (!file) return false;
-  const ext = path.extname(file.originalname || '').toLowerCase();
-  const byMime = file.mimetype ? ALLOWED_MIME.has(file.mimetype) : false;
-  const byExt = ext ? ALLOWED_EXT.has(ext) : false;
-  // Terima jika salah satu cocok (beberapa browser memberi mimetype octet-stream)
-  return byMime || byExt;
-}
-
-async function safeUnlink(p) {
-  if (!p) return;
-  try { await fs.unlink(p); } catch (_) { /* ignore */ }
-}
-
-function ensureCloudinaryConfigured() {
-  // Minimal cek via env CLOUDINARY_URL atau trio kredensial
-  const hasUrl = !!process.env.CLOUDINARY_URL;
-  const hasTriplet = !!(cloudinary.config().cloud_name && cloudinary.config().api_key && cloudinary.config().api_secret);
-  return hasUrl || hasTriplet;
-}
 
 exports.createMarketingKit = async (req, res) => {
   let transaction;
