@@ -1,4 +1,4 @@
-const { MarketingKit, Service, User, DownloadLog, Portfolio, SubPortfolio, Sequelize } = require('../models');
+const { MarketingKit, Service, User, DownloadLog, Portfolio, SubPortfolio, sequelize } = require('../models');
 const fs = require('fs').promises;
 const path = require('path');
 const { Op } = require('sequelize');
