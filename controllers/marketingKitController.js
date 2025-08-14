@@ -85,60 +85,188 @@ exports.getMarketingKitById = async (req, res) => {
   }
 };
 
+// controllers/marketingKitController.js
+const fs = require('fs').promises;
+const path = require('path');
+const { MarketingKit, Service, sequelize } = require('../models');
+const cloudinary = require('cloudinary').v2;
+
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// MIME/ekstensi yang diizinkan
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+]);
+const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.ppt', '.pptx']);
+
+function normalizeServiceIds(input) {
+  if (!input) return [];
+  // Bisa datang sebagai array dari form-data: service_ids[]=a, service_ids[]=b
+  if (Array.isArray(input)) return [...new Set(input.map(String))];
+  // Bisa datang sebagai string tunggal: "id"
+  if (typeof input === 'string') {
+    const s = input.trim();
+    // Bisa jadi JSON string: '["a","b"]'
+    if ((s.startsWith('[') && s.endsWith(']')) || (s.startsWith('"') && s.endsWith('"'))) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return [...new Set(parsed.map(String))];
+        return parsed ? [String(parsed)] : [];
+      } catch {
+        // fallback
+      }
+    }
+    // Bisa juga comma-separated: "a,b,c"
+    if (s.includes(',')) return [...new Set(s.split(',').map(v => v.trim()).filter(Boolean))];
+    return [s];
+  }
+  // Fallback
+  return [];
+}
+
+function isAllowedFile(file) {
+  if (!file) return false;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const byMime = file.mimetype ? ALLOWED_MIME.has(file.mimetype) : false;
+  const byExt = ext ? ALLOWED_EXT.has(ext) : false;
+  // Terima jika salah satu cocok (beberapa browser memberi mimetype octet-stream)
+  return byMime || byExt;
+}
+
+async function safeUnlink(p) {
+  if (!p) return;
+  try { await fs.unlink(p); } catch (_) { /* ignore */ }
+}
+
+function ensureCloudinaryConfigured() {
+  // Minimal cek via env CLOUDINARY_URL atau trio kredensial
+  const hasUrl = !!process.env.CLOUDINARY_URL;
+  const hasTriplet = !!(cloudinary.config().cloud_name && cloudinary.config().api_key && cloudinary.config().api_secret);
+  return hasUrl || hasTriplet;
+}
+
 exports.createMarketingKit = async (req, res) => {
+  let transaction;
+  let uploaded; // simpan hasil cloudinary buat rollback jika perlu
+
   try {
-    const { name, file_type, service_ids } = req.body;
+    const { name, file_type } = req.body || {};
+    const service_ids = normalizeServiceIds(req.body?.service_ids || req.body?.['service_ids[]']);
     const file = req.file;
 
-    if (!name) {
+    // ====== Validasi input dasar ======
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Nama file wajib diisi' });
     }
-
-    if (!file_type) {
+    if (!file_type || !file_type.trim()) {
       return res.status(400).json({ error: 'Tipe file wajib dipilih' });
     }
-
     if (!file) {
       return res.status(400).json({ error: 'File harus diunggah' });
     }
-
-    if (!service_ids || !service_ids.length) {
+    if (!service_ids.length) {
       return res.status(400).json({ error: 'Minimal satu layanan harus dipilih' });
     }
 
-    const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > MAX_FILE_SIZE_MB) {
-      return res.status(400).json({ error: `Ukuran file maksimal 10 MB` });
+    // ====== Validasi file ======
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: `Ukuran file maksimal ${MAX_FILE_SIZE_MB} MB` });
+    }
+    if (!isAllowedFile(file)) {
+      return res.status(400).json({ error: 'Tipe file tidak didukung. Gunakan PDF/DOC/DOCX/PPT/PPTX' });
     }
 
-    const uploaded = await cloudinary.uploader.upload(file.path, {
-      folder: 'marketing_kits',
-      resource_type: 'raw',
-    });
+    // ====== Validasi Cloudinary config ======
+    if (!ensureCloudinaryConfigured()) {
+      return res.status(500).json({ error: 'Konfigurasi Cloudinary tidak ditemukan di environment' });
+    }
+
+    // ====== Validasi service_ids exist (opsional tapi bagus) ======
+    const servicesCount = await Service.count({ where: { id: service_ids } });
+    if (servicesCount !== service_ids.length) {
+      return res.status(400).json({ error: 'Terdapat service_id yang tidak valid' });
+    }
+
+    // ====== Upload ke Cloudinary ======
+    try {
+      uploaded = await cloudinary.uploader.upload(file.path, {
+        folder: 'marketing_kits',
+        resource_type: 'raw',          // untuk non-image (pdf/doc/ppt)
+        use_filename: true,
+        unique_filename: true,
+        overwrite: false,
+      });
+    } catch (uploadErr) {
+      console.error('Cloudinary upload error:', uploadErr);
+      return res.status(500).json({
+        error: 'Gagal upload ke Cloudinary',
+        details: uploadErr?.message || 'Unknown Cloudinary error',
+      });
+    }
+
+    // ====== Transaksi pembuatan record + relasi ======
+    transaction = await sequelize.transaction();
 
     const newKit = await MarketingKit.create({
-      name,
-      file_type,
-      file_path: uploaded.secure_url,
+      name: name.trim(),
+      file_type: file_type.trim(),
+      file_path: uploaded.secure_url,         // simpan URL aman (https)
       cloudinary_public_id: uploaded.public_id,
-      uploaded_by: req.user.id,
-    });
+      uploaded_by: req.user?.id || null,      // pastikan auth middleware mengisi req.user
+    }, { transaction });
 
-    await newKit.setServices(service_ids);
+    await newKit.setServices(service_ids, { transaction });
 
-    await unlinkFile(file.path); // Hapus file lokal setelah upload sukses
+    await transaction.commit();
 
-    res.status(201).json({
+    // ====== Cleanup file lokal ======
+    await safeUnlink(file.path);
+
+    // Kembalikan respons sukses
+    return res.status(201).json({
       message: 'Berhasil mengunggah marketing kit',
-      marketing_kit: newKit,
+      marketing_kit: {
+        ...newKit.toJSON(),
+        file_url: uploaded.secure_url, // agar cocok dengan frontend yang membaca file_url
+      },
     });
+
   } catch (err) {
-    if (err.http_code === 413) {
-      return res.status(400).json({ error: 'Ukuran file melebihi batas maksimum (10 MB)' });
+    console.error('createMarketingKit error:', err);
+
+    // Rollback transaksi jika sudah dibuat
+    if (transaction) {
+      try { await transaction.rollback(); } catch (_) {}
     }
-    res.status(500).json({
+
+    // Hapus file di Cloudinary bila sudah sempat ter-upload
+    if (uploaded?.public_id) {
+      try {
+        await cloudinary.uploader.destroy(uploaded.public_id, { resource_type: 'raw' });
+      } catch (destroyErr) {
+        console.error('Cloudinary cleanup failed:', destroyErr);
+      }
+    }
+
+    // Cleanup file lokal
+    await safeUnlink(req.file?.path);
+
+    // Mapping error khusus
+    if (err.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ error: 'Relasi service tidak valid' });
+    }
+    if (err.http_code === 413) {
+      return res.status(400).json({ error: `Ukuran file melebihi batas maksimum (${MAX_FILE_SIZE_MB} MB)` });
+    }
+
+    return res.status(500).json({
       error: 'Terjadi kesalahan saat mengunggah marketing kit. Silakan coba lagi.',
-      details: err.message,
+      details: err?.message || String(err),
     });
   }
 };
