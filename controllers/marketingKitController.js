@@ -267,7 +267,7 @@ exports.updateMarketingKit = async (req, res) => {
 
         marketingKit.file_path = uploadResult.secure_url;
         marketingKit.cloudinary_public_id = uploadResult.public_id;
-        marketingKit.name = file.originalname;
+        marketingKit.name = file.originalname; // gunakan nama asli file baru
       } catch (err) {
         console.error('Gagal upload file baru:', err);
         if (err.http_code === 413) {
@@ -288,7 +288,7 @@ exports.updateMarketingKit = async (req, res) => {
     await marketingKit.setServices(service_ids);
 
     const updatedMarketingKit = await getMarketingKitByIdLogic(id);
-    
+
     res.json({
       message: 'Marketing kit berhasil diperbarui',
       marketing_kit: updatedMarketingKit,
