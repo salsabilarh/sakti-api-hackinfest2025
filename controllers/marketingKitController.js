@@ -147,121 +147,85 @@ exports.getMarketingKitById = async (req, res) => {
 
 exports.createMarketingKit = async (req, res) => {
   let transaction;
-  let uploaded; // simpan hasil cloudinary buat rollback jika perlu
 
   try {
     const { name, file_type } = req.body || {};
-    const service_ids = normalizeServiceIds(req.body?.service_ids || req.body?.['service_ids[]']);
-    const file = req.file;
+    const service_ids = normalizeServiceIds(req.body?.service_ids || req.body?.["service_ids[]"]);
+    const files = req.files;
 
-    // ====== Validasi input dasar ======
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Nama file wajib diisi' });
+    if (!name?.trim()) {
+      return res.status(400).json({ error: "Nama file wajib diisi" });
     }
-    if (!file_type || !file_type.trim()) {
-      return res.status(400).json({ error: 'Tipe file wajib dipilih' });
+    if (!file_type?.trim()) {
+      return res.status(400).json({ error: "Tipe file wajib dipilih" });
     }
-    if (!file) {
-      return res.status(400).json({ error: 'File harus diunggah' });
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "Minimal satu file harus diunggah" });
     }
     if (!service_ids.length) {
-      return res.status(400).json({ error: 'Minimal satu layanan harus dipilih' });
+      return res.status(400).json({ error: "Minimal satu layanan harus dipilih" });
     }
 
-    // ====== Validasi file ======
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return res.status(400).json({ error: `Ukuran file maksimal ${MAX_FILE_SIZE_MB} MB` });
-    }
-    if (!isAllowedFile(file)) {
-      return res.status(400).json({ error: 'Tipe file tidak didukung. Gunakan PDF/DOC/DOCX/PPT/PPTX' });
-    }
-
-    // ====== Validasi Cloudinary config ======
-    if (!ensureCloudinaryConfigured()) {
-      return res.status(500).json({ error: 'Konfigurasi Cloudinary tidak ditemukan di environment' });
-    }
-
-    // ====== Validasi service_ids exist (opsional tapi bagus) ======
+    // validasi services
     const servicesCount = await Service.count({ where: { id: service_ids } });
     if (servicesCount !== service_ids.length) {
-      return res.status(400).json({ error: 'Terdapat service_id yang tidak valid' });
+      return res.status(400).json({ error: "Terdapat service_id yang tidak valid" });
     }
 
-    // ====== Upload ke Cloudinary ======
-    try {
-      uploaded = await cloudinary.uploader.upload(file.path, {
-        folder: 'marketing_kits',
-        resource_type: 'raw',          // untuk non-image (pdf/doc/ppt)
+    if (!ensureCloudinaryConfigured()) {
+      return res.status(500).json({ error: "Cloudinary tidak dikonfigurasi" });
+    }
+
+    transaction = await sequelize.transaction();
+
+    const createdKits = [];
+
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        throw new Error(`Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`);
+      }
+      if (!isAllowedFile(file)) {
+        throw new Error(`File ${file.originalname} memiliki tipe tidak didukung`);
+      }
+
+      const uploaded = await cloudinary.uploader.upload(file.path, {
+        folder: "marketing_kits",
+        resource_type: "raw",
         use_filename: true,
         unique_filename: true,
         overwrite: false,
       });
-    } catch (uploadErr) {
-      console.error('Cloudinary upload error:', uploadErr);
-      return res.status(500).json({
-        error: 'Gagal upload ke Cloudinary',
-        details: uploadErr?.message || 'Unknown Cloudinary error',
-      });
+
+      const newKit = await MarketingKit.create(
+        {
+          name: `${name.trim()} - ${file.originalname}`,
+          file_type: file_type.trim(),
+          file_path: uploaded.secure_url,
+          cloudinary_public_id: uploaded.public_id,
+          uploaded_by: req.user?.id || null,
+        },
+        { transaction }
+      );
+
+      await newKit.setServices(service_ids, { transaction });
+      createdKits.push({ ...newKit.toJSON(), file_url: uploaded.secure_url });
+
+      // hapus file lokal
+      await safeUnlink(file.path);
     }
-
-    // ====== Transaksi pembuatan record + relasi ======
-    transaction = await sequelize.transaction();
-
-    const newKit = await MarketingKit.create({
-      name: name.trim(),
-      file_type: file_type.trim(),
-      file_path: uploaded.secure_url,         // simpan URL aman (https)
-      cloudinary_public_id: uploaded.public_id,
-      uploaded_by: req.user?.id || null,      // pastikan auth middleware mengisi req.user
-    }, { transaction });
-
-    await newKit.setServices(service_ids, { transaction });
 
     await transaction.commit();
 
-    // ====== Cleanup file lokal ======
-    await safeUnlink(file.path);
-
-    // Kembalikan respons sukses
     return res.status(201).json({
-      message: 'Berhasil mengunggah marketing kit',
-      marketing_kit: {
-        ...newKit.toJSON(),
-        file_url: uploaded.secure_url, // agar cocok dengan frontend yang membaca file_url
-      },
+      message: "Berhasil mengunggah semua marketing kit",
+      marketing_kits: createdKits,
     });
-
   } catch (err) {
-    console.error('createMarketingKit error:', err);
-
-    // Rollback transaksi jika sudah dibuat
-    if (transaction) {
-      try { await transaction.rollback(); } catch (_) {}
-    }
-
-    // Hapus file di Cloudinary bila sudah sempat ter-upload
-    if (uploaded?.public_id) {
-      try {
-        await cloudinary.uploader.destroy(uploaded.public_id, { resource_type: 'raw' });
-      } catch (destroyErr) {
-        console.error('Cloudinary cleanup failed:', destroyErr);
-      }
-    }
-
-    // Cleanup file lokal
-    await safeUnlink(req.file?.path);
-
-    // Mapping error khusus
-    if (err.name === 'SequelizeForeignKeyConstraintError') {
-      return res.status(400).json({ error: 'Relasi service tidak valid' });
-    }
-    if (err.http_code === 413) {
-      return res.status(400).json({ error: `Ukuran file melebihi batas maksimum (${MAX_FILE_SIZE_MB} MB)` });
-    }
-
+    if (transaction) await transaction.rollback();
+    console.error("createMarketingKit error:", err);
     return res.status(500).json({
-      error: 'Terjadi kesalahan saat mengunggah marketing kit. Silakan coba lagi.',
-      details: err?.message || String(err),
+      error: "Terjadi kesalahan saat upload",
+      details: err.message,
     });
   }
 };
