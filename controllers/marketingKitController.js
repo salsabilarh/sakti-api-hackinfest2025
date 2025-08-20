@@ -165,17 +165,23 @@ exports.createMarketingKit = async (req, res) => {
       return res.status(400).json({ error: "Minimal satu layanan harus dipilih" });
     }
     if (fileTypes.length !== files.length) {
-      return res.status(400).json({ error: "Jumlah tipe file tidak sesuai jumlah file" });
+      return res.status(400).json({ 
+        error: "Jumlah tipe file tidak sesuai jumlah file",
+        hint: "Pastikan setiap file memiliki tipe file yang dipilih"
+      });
     }
 
     // validasi service_ids
     const servicesCount = await Service.count({ where: { id: service_ids } });
     if (servicesCount !== service_ids.length) {
-      return res.status(400).json({ error: "Terdapat service_id yang tidak valid" });
+      return res.status(400).json({ 
+        error: "Terdapat service_id yang tidak valid",
+        hint: "Periksa ulang pilihan layanan sebelum upload"
+      });
     }
 
     if (!ensureCloudinaryConfigured()) {
-      return res.status(500).json({ error: "Cloudinary tidak dikonfigurasi" });
+      return res.status(500).json({ error: "Cloudinary tidak dikonfigurasi. Hubungi admin." });
     }
 
     transaction = await sequelize.transaction();
@@ -186,13 +192,25 @@ exports.createMarketingKit = async (req, res) => {
       const file_type = (fileTypes[i] || "").trim();
 
       if (!file_type) {
-        throw new Error(`Tipe file wajib dipilih untuk file ${file.originalname}`);
+        await transaction.rollback();
+        return res.status(400).json({ 
+          error: `Tipe file wajib dipilih untuk file ${file.originalname}`,
+          hint: "Silakan pilih tipe file sebelum mengunggah"
+        });
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        throw new Error(`Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`);
+        await transaction.rollback();
+        return res.status(400).json({ 
+          error: `Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`,
+          hint: "Kompres atau pilih file yang lebih kecil"
+        });
       }
       if (!isAllowedFile(file)) {
-        throw new Error(`File ${file.originalname} memiliki tipe tidak didukung`);
+        await transaction.rollback();
+        return res.status(400).json({ 
+          error: `File ${file.originalname} memiliki tipe tidak didukung`,
+          hint: "Hanya file PDF, DOCX, XLSX, PPTX, dan ZIP yang diperbolehkan (contoh)"
+        });
       }
 
       let uploaded;
