@@ -48,7 +48,7 @@ router.post(
   '/',
   authMiddleware.authenticate,
   authMiddleware.authorizeAdvanced({ roles: ['admin', 'management'], allowUnits: ['sbu', 'ppk'] }),
-  uploadMiddleware.array('file'),
+  uploadMiddleware.array('files'),
   marketingKitController.createMarketingKit
 );
 router.put(

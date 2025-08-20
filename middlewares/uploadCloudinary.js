@@ -10,6 +10,16 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!['.pdf', '.doc', '.docx', '.ppt', '.pptx'].includes(ext)) {
+      return cb(new Error('File type not allowed'));
+    }
+    cb(null, true);
+  },
+});
 
 module.exports = upload;
