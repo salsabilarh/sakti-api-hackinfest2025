@@ -146,86 +146,72 @@ exports.getMarketingKitById = async (req, res) => {
 };
 
 exports.createMarketingKit = async (req, res) => {
-  let transaction;
+  const t = await sequelize.transaction();
 
   try {
-    const { file_type } = req.body || {};
-    const service_ids = normalizeServiceIds(req.body?.service_ids || req.body?.["service_ids[]"]);
     const files = req.files;
+    const service_ids = req.body["service_ids[]"];
+    let file_types = req.body["file_types[]"];
 
-    if (!file_type?.trim()) {
-      return res.status(400).json({ error: "Tipe file wajib dipilih" });
-    }
-    if (!files || files.length === 0) {
+    if (!files || !files.length) {
       return res.status(400).json({ error: "Minimal satu file harus diunggah" });
     }
-    if (!service_ids.length) {
-      return res.status(400).json({ error: "Minimal satu layanan harus dipilih" });
+
+    // service_ids bisa string tunggal atau array → paksa jadi array
+    const serviceIds = Array.isArray(service_ids) ? service_ids : [service_ids].filter(Boolean);
+
+    // file_types bisa string tunggal kalau cuma satu file → paksa jadi array
+    if (!Array.isArray(file_types)) {
+      file_types = [file_types];
     }
 
-    // validasi services
-    const servicesCount = await Service.count({ where: { id: service_ids } });
-    if (servicesCount !== service_ids.length) {
-      return res.status(400).json({ error: "Terdapat service_id yang tidak valid" });
+    if (!file_types || file_types.length !== files.length) {
+      return res.status(400).json({ error: "Tipe file wajib dipilih untuk setiap file" });
     }
 
-    if (!ensureCloudinaryConfigured()) {
-      return res.status(500).json({ error: "Cloudinary tidak dikonfigurasi" });
-    }
+    const newKits = [];
 
-    transaction = await sequelize.transaction();
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const file_type = file_types[i];
 
-    const createdKits = [];
-
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        throw new Error(`Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`);
-      }
-      if (!isAllowedFile(file)) {
-        throw new Error(`File ${file.originalname} memiliki tipe tidak didukung`);
+      if (!file_type?.trim()) {
+        throw new Error(`File ${file.originalname} tidak punya tipe file`);
       }
 
+      // upload ke Cloudinary
       const uploaded = await cloudinary.uploader.upload(file.path, {
         folder: "marketing_kits",
-        resource_type: "raw",
-        use_filename: true,
-        unique_filename: true,
-        overwrite: false,
       });
 
+      // simpan ke DB
       const newKit = await MarketingKit.create(
         {
-          name: file.originalname, // langsung pakai nama asli file
+          name: file.originalname,
           file_type: file_type.trim(),
           file_path: uploaded.secure_url,
           cloudinary_public_id: uploaded.public_id,
           uploaded_by: req.user?.id || null,
         },
-        { transaction }
+        { transaction: t }
       );
 
-      await newKit.setServices(service_ids, { transaction });
-      createdKits.push({ ...newKit.toJSON(), file_url: uploaded.secure_url });
+      if (serviceIds.length) {
+        await newKit.setServices(serviceIds, { transaction: t });
+      }
 
-      // hapus file lokal
-      await safeUnlink(file.path);
+      newKits.push(newKit);
     }
 
-    await transaction.commit();
-
-    return res.status(201).json({
-      message: "Berhasil mengunggah semua marketing kit",
-      marketing_kits: createdKits,
-    });
-  } catch (err) {
-    if (transaction) await transaction.rollback();
-    console.error("createMarketingKit error:", err);
-    return res.status(500).json({
-      error: "Terjadi kesalahan saat upload",
-      details: err.message,
-    });
+    await t.commit();
+    res.status(201).json(newKits);
+  } catch (error) {
+    await t.rollback();
+    console.error("Upload error:", error);
+    res.status(500).json({ error: "Gagal mengunggah file" });
   }
 };
+
 
 exports.updateMarketingKit = async (req, res) => {
   try {
