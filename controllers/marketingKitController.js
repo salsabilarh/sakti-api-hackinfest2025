@@ -190,7 +190,7 @@ exports.createMarketingKit = async (req, res) => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const file_type = (fileTypes[i] || "").trim();
-      const fileBaseName = path.parse(file.originalname).name; // ✅ pindahkan ke sini
+      const fileBaseName = path.parse(file.originalname).name;
 
       if (!file_type) {
         await transaction.rollback();
