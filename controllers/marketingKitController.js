@@ -149,13 +149,10 @@ exports.createMarketingKit = async (req, res) => {
   let transaction;
 
   try {
-    const { name, file_type } = req.body || {};
+    const { file_type } = req.body || {};
     const service_ids = normalizeServiceIds(req.body?.service_ids || req.body?.["service_ids[]"]);
     const files = req.files;
 
-    if (!name?.trim()) {
-      return res.status(400).json({ error: "Nama file wajib diisi" });
-    }
     if (!file_type?.trim()) {
       return res.status(400).json({ error: "Tipe file wajib dipilih" });
     }
@@ -198,7 +195,7 @@ exports.createMarketingKit = async (req, res) => {
 
       const newKit = await MarketingKit.create(
         {
-          name: `${name.trim()} - ${file.originalname}`,
+          name: file.originalname, // langsung pakai nama asli file
           file_type: file_type.trim(),
           file_path: uploaded.secure_url,
           cloudinary_public_id: uploaded.public_id,
@@ -233,7 +230,7 @@ exports.createMarketingKit = async (req, res) => {
 exports.updateMarketingKit = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, file_type } = req.body;
+    const { file_type } = req.body;
     let service_ids = req.body.service_ids || [];
 
     if (!Array.isArray(service_ids)) {
@@ -270,6 +267,7 @@ exports.updateMarketingKit = async (req, res) => {
 
         marketingKit.file_path = uploadResult.secure_url;
         marketingKit.cloudinary_public_id = uploadResult.public_id;
+        marketingKit.name = file.originalname;
       } catch (err) {
         console.error('Gagal upload file baru:', err);
         if (err.http_code === 413) {
@@ -282,14 +280,15 @@ exports.updateMarketingKit = async (req, res) => {
       }
     }
 
-    marketingKit.name = name ?? marketingKit.name;
-    marketingKit.file_type = file_type ?? marketingKit.file_type;
+    if (file_type) {
+      marketingKit.file_type = file_type;
+    }
 
     await marketingKit.save();
     await marketingKit.setServices(service_ids);
 
     const updatedMarketingKit = await getMarketingKitByIdLogic(id);
-
+    
     res.json({
       message: 'Marketing kit berhasil diperbarui',
       marketing_kit: updatedMarketingKit,

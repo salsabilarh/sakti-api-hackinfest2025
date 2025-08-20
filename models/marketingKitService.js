@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
     },
   }, {
     tableName: 'marketing_kit_services',
-    timestamps: false, // ✅ Penting!
+    timestamps: false,
     underscored: true,
   });
 
