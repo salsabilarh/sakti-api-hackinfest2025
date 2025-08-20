@@ -150,14 +150,11 @@ exports.createMarketingKit = async (req, res) => {
 
   try {
     const files = req.files;
+    // service_ids dikirim sekali untuk semua file
     const rawServiceIds = req.body?.service_ids || req.body?.["service_ids[]"];
-    const service_ids = Array.isArray(rawServiceIds)
-      ? rawServiceIds
-      : rawServiceIds
-      ? [rawServiceIds]
-      : [];
+    const service_ids = normalizeServiceIds(rawServiceIds);
 
-    // Ambil file_types per file
+    // file_types dikirim sebaris per file
     let fileTypes = req.body?.file_types || req.body?.["file_types[]"] || [];
     if (!Array.isArray(fileTypes)) fileTypes = [fileTypes];
 
@@ -171,7 +168,7 @@ exports.createMarketingKit = async (req, res) => {
       return res.status(400).json({ error: "Jumlah tipe file tidak sesuai jumlah file" });
     }
 
-    // validasi services
+    // validasi service_ids
     const servicesCount = await Service.count({ where: { id: service_ids } });
     if (servicesCount !== service_ids.length) {
       return res.status(400).json({ error: "Terdapat service_id yang tidak valid" });
@@ -211,6 +208,7 @@ exports.createMarketingKit = async (req, res) => {
         await safeUnlink(file.path);
       }
 
+      // buat 1 record MarketingKit per file
       const newKit = await MarketingKit.create(
         {
           name: file.originalname,
@@ -222,7 +220,9 @@ exports.createMarketingKit = async (req, res) => {
         { transaction }
       );
 
+      // hubungkan ke semua service_ids yg sama untuk semua file
       await newKit.setServices(service_ids, { transaction });
+
       createdKits.push({ ...newKit.toJSON(), file_url: uploaded.secure_url });
     }
 
