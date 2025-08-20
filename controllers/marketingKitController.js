@@ -153,6 +153,7 @@ exports.createMarketingKit = async (req, res) => {
     // service_ids dikirim sekali untuk semua file
     const rawServiceIds = req.body?.service_ids || req.body?.["service_ids[]"];
     const service_ids = normalizeServiceIds(rawServiceIds);
+    const fileBaseName = path.parse(file.originalname).name;
 
     // file_types dikirim sebaris per file
     let fileTypes = req.body?.file_types || req.body?.["file_types[]"] || [];
@@ -229,7 +230,7 @@ exports.createMarketingKit = async (req, res) => {
       // buat 1 record MarketingKit per file
       const newKit = await MarketingKit.create(
         {
-          name: file.originalname,
+          name: fileBaseName,
           file_type,
           file_path: uploaded.secure_url,
           cloudinary_public_id: uploaded.public_id,
@@ -303,7 +304,7 @@ exports.updateMarketingKit = async (req, res) => {
 
         marketingKit.file_path = uploadResult.secure_url;
         marketingKit.cloudinary_public_id = uploadResult.public_id;
-        marketingKit.name = file.originalname; // gunakan nama asli file baru
+        marketingKit.name = path.parse(file.originalname).name;
       } catch (err) {
         console.error('Gagal upload file baru:', err);
         if (err.http_code === 413) {
