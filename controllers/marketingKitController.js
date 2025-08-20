@@ -153,7 +153,6 @@ exports.createMarketingKit = async (req, res) => {
     // service_ids dikirim sekali untuk semua file
     const rawServiceIds = req.body?.service_ids || req.body?.["service_ids[]"];
     const service_ids = normalizeServiceIds(rawServiceIds);
-    const fileBaseName = path.parse(file.originalname).name;
 
     // file_types dikirim sebaris per file
     let fileTypes = req.body?.file_types || req.body?.["file_types[]"] || [];
@@ -191,6 +190,7 @@ exports.createMarketingKit = async (req, res) => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const file_type = (fileTypes[i] || "").trim();
+      const fileBaseName = path.parse(file.originalname).name; // ✅ pindahkan ke sini
 
       if (!file_type) {
         await transaction.rollback();
