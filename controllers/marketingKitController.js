@@ -149,23 +149,26 @@ exports.createMarketingKit = async (req, res) => {
   let transaction;
 
   try {
-    const { file_type } = req.body || {};
+    const files = req.files;
     const rawServiceIds = req.body?.service_ids || req.body?.["service_ids[]"];
     const service_ids = Array.isArray(rawServiceIds)
       ? rawServiceIds
       : rawServiceIds
       ? [rawServiceIds]
       : [];
-    const files = req.files;
 
-    if (!file_type || typeof file_type !== "string" || !file_type.trim()) {
-      return res.status(400).json({ error: "Tipe file wajib dipilih" });
-    }
+    // Ambil file_types per file
+    let fileTypes = req.body?.file_types || req.body?.["file_types[]"] || [];
+    if (!Array.isArray(fileTypes)) fileTypes = [fileTypes];
+
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "Minimal satu file harus diunggah" });
     }
     if (!service_ids.length) {
       return res.status(400).json({ error: "Minimal satu layanan harus dipilih" });
+    }
+    if (fileTypes.length !== files.length) {
+      return res.status(400).json({ error: "Jumlah tipe file tidak sesuai jumlah file" });
     }
 
     // validasi services
@@ -179,10 +182,15 @@ exports.createMarketingKit = async (req, res) => {
     }
 
     transaction = await sequelize.transaction();
-
     const createdKits = [];
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const file_type = (fileTypes[i] || "").trim();
+
+      if (!file_type) {
+        throw new Error(`Tipe file wajib dipilih untuk file ${file.originalname}`);
+      }
       if (file.size > MAX_FILE_SIZE_BYTES) {
         throw new Error(`Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`);
       }
@@ -200,14 +208,13 @@ exports.createMarketingKit = async (req, res) => {
           overwrite: false,
         });
       } finally {
-        // apapun hasil upload, pastikan file lokal dibersihkan
         await safeUnlink(file.path);
       }
 
       const newKit = await MarketingKit.create(
         {
-          name: file.originalname, // simpan nama asli file
-          file_type: file_type.trim(),
+          name: file.originalname,
+          file_type,
           file_path: uploaded.secure_url,
           cloudinary_public_id: uploaded.public_id,
           uploaded_by: req.user?.id || null,
@@ -220,16 +227,13 @@ exports.createMarketingKit = async (req, res) => {
     }
 
     await transaction.commit();
-
     return res.status(201).json({
       message: "Berhasil mengunggah semua marketing kit",
       marketing_kits: createdKits,
     });
   } catch (err) {
     if (transaction) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackErr) {
+      try { await transaction.rollback(); } catch (rollbackErr) {
         console.error("Rollback error:", rollbackErr);
       }
     }
