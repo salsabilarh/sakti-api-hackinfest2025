@@ -196,21 +196,23 @@ exports.createMarketingKit = async (req, res) => {
         await transaction.rollback();
         return res.status(400).json({ 
           error: `Tipe file wajib dipilih untuk file ${file.originalname}`,
-          hint: "Silakan pilih tipe file sebelum mengunggah"
+          hint: "Silakan pilih tipe file sebelum mengunggah."
         });
       }
+
       if (file.size > MAX_FILE_SIZE_BYTES) {
         await transaction.rollback();
         return res.status(400).json({ 
-          error: `Ukuran file ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB`,
-          hint: "Kompres atau pilih file yang lebih kecil"
+          error: "Ukuran file terlalu besar",
+          hint: `File ${file.originalname} melebihi ${MAX_FILE_SIZE_MB} MB. Silakan kompres atau pilih file yang lebih kecil.`,
         });
       }
+
       if (!isAllowedFile(file)) {
         await transaction.rollback();
         return res.status(400).json({ 
-          error: `File ${file.originalname} memiliki tipe tidak didukung`,
-          hint: "Hanya file PDF, DOCX, XLSX, PPTX, dan ZIP yang diperbolehkan (contoh)"
+          error: "Tipe file tidak didukung",
+          hint: `File ${file.originalname} memiliki format tidak didukung. Hanya PDF, DOC, DOCX, PPT, dan PPTX diperbolehkan.`,
         });
       }
 
