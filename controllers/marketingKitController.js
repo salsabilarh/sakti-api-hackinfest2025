@@ -351,6 +351,13 @@ exports.downloadMarketingKit = async (req, res) => {
       return res.status(404).json({ error: 'Marketing kit not found' });
     }
 
+    // Cegah download untuk technical document
+    if (marketingKit.file_type?.toLowerCase() === "technical document") {
+      return res.status(403).json({
+        error: "Technical Document hanya dapat dipreview, tidak bisa diunduh."
+      });
+    }
+
     await DownloadLog.create({
       marketing_kit_id: id,
       user_id: req.user.id,
