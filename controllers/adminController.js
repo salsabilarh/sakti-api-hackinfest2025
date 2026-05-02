@@ -48,7 +48,7 @@ exports.getDashboardStats = async (req, res) => {
     // Hitung total permintaan reset password yang belum diproses
     const totalPasswordResetRequests = await PasswordResetRequest.count({
       where: {
-        is_processed: false, // sesuaikan nama field dan kondisi
+        is_processed: false,
       },
     });
 
@@ -59,7 +59,7 @@ exports.getDashboardStats = async (req, res) => {
         total_active_users: totalActiveUsers,
         total_downloads: totalDownloads,
         total_pending_unit_change_requests: totalPendingUnitChangeRequests,
-        total_password_reset_requests: totalPasswordResetRequests, // <--- ditambahkan
+        total_password_reset_requests: totalPasswordResetRequests,
       },
     });
   } catch (error) {
@@ -85,7 +85,6 @@ exports.getAllUsers = async (req, res) => {
     const where = {};
     const include = [];
 
-    // Pencarian nama / email
     if (search) {
       where[Op.or] = [
         { full_name: { [Op.like]: `%${search}%` } },
@@ -93,17 +92,14 @@ exports.getAllUsers = async (req, res) => {
       ];
     }
 
-    // Filter Role
     if (role) {
       where.role = role;
     }
 
-    // Filter status aktif
     if (status) {
       where.is_active = status.toLowerCase() === "active";
     }
 
-    // Filter status verifikasi
     if (verified !== undefined) {
       if (verified === "true") {
         where.is_verified = true;
@@ -111,19 +107,15 @@ exports.getAllUsers = async (req, res) => {
         where.is_verified = false;
       }
     } else {
-      // Default: hanya user yang status verifikasi tidak null
       where.is_verified = { [Op.ne]: null };
     }
 
-    // Filter unit kerja
     if (unit) {
       where.unit_kerja_id = unit;
     }
 
-    // Hitung total
     const total = await User.count({ where });
 
-    // Ambil data user dengan relasi
     const users = await User.findAll({
       where,
       include: [
@@ -143,7 +135,6 @@ exports.getAllUsers = async (req, res) => {
           "is_verified",
           "last_login",
           "created_at",
-          // Tambahkan has_temp_password sebagai virtual field boolean
           [sequelize.literal(`CASE WHEN temporary_password IS NOT NULL THEN true ELSE false END`), "has_temp_password"]
         ],
       },
@@ -250,24 +241,32 @@ exports.getPasswordResetRequests = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
 
-    // Hitung total data
-    const total = await PasswordResetRequest.count({
+    // ✅ Ambil hanya 1 request per user_id (yang paling lama = MIN id)
+    const earliestIds = await PasswordResetRequest.findAll({
       where: { is_processed: false },
+      attributes: [[sequelize.fn('MIN', sequelize.col('id')), 'min_id']],
+      group: ['user_id'],
+      raw: true,
     });
 
-    // Dapatkan permintaan reset password
+    const ids = earliestIds.map((r) => r.min_id);
+
+    if (ids.length === 0) {
+      return res.json({
+        requests: [],
+        pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), total_pages: 0 },
+      });
+    }
+
+    const total = ids.length;
+
     const requests = await PasswordResetRequest.findAll({
-      where: { is_processed: false },
+      where: { id: { [Op.in]: ids } },
       include: [
         {
           association: 'user',
           attributes: ['id', 'full_name', 'email', 'role'],
-          include: [
-            {
-              association: 'unit',
-              attributes: ['id', 'name'],
-            },
-          ],
+          include: [{ association: 'unit', attributes: ['id', 'name'] }],
         },
       ],
       order: [['created_at', 'ASC']],
@@ -289,7 +288,6 @@ exports.getPasswordResetRequests = async (req, res) => {
     res.status(500).json({ error: 'Failed to get password reset requests' });
   }
 };
-
 exports.resetUserPassword = async (req, res) => {
   try {
     const { id } = req.params;
@@ -315,12 +313,10 @@ exports.resetUserPassword = async (req, res) => {
       reset_token_expires: null,
     });
 
-    // Update status permintaan reset password
-    await request.update({
-      is_processed: true,
-      processed_by: req.user.id,
-      processed_at: new Date(),
-    });
+    await PasswordResetRequest.update(
+      { is_processed: true, processed_by: req.user.id, processed_at: new Date() },
+      { where: { user_id: request.user.id, is_processed: false } }
+    );
 
     res.json({ message: 'Password reset successfully to default' });
   } catch (error) {
@@ -329,10 +325,8 @@ exports.resetUserPassword = async (req, res) => {
   }
 };
 
-
 exports.getUnitChangeRequests = async (req, res) => {
   try {
-    // Hanya admin yang bisa mengakses
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -340,62 +334,45 @@ exports.getUnitChangeRequests = async (req, res) => {
       });
     }
 
-    const limit = parseInt(req.query.limit) || 5;
-    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit, 10) || 30;
+    const page = parseInt(req.query.page, 10) || 1;
     const offset = (page - 1) * limit;
+    const status = req.query.status;
 
-    const { count, rows: requests } = await UnitChangeRequest.findAndCountAll({
-      where: { status: 'pending' },
+    const where = {};
+    if (status) where.status = status;
+
+    const { count, rows } = await UnitChangeRequest.findAndCountAll({
+      where,
       include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'full_name', 'email']
-        },
-        {
-          model: Unit,
-          as: 'currentUnit',
-          attributes: ['id', 'name']
-        },
-        {
-          model: Unit,
-          as: 'requestedUnit',
-          attributes: ['id', 'name']
-        }
+        { model: User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+        { model: Unit, as: 'currentUnit', attributes: ['id', 'name'] },
+        { model: Unit, as: 'requestedUnit', attributes: ['id', 'name'] },
       ],
-      order: [['created_at', 'DESC']],
+      order: [['createdAt', 'DESC']],
       limit,
       offset,
     });
 
+    const data = rows.map(r => ({
+      id: r.id,
+      user: { id: r.user.id, name: r.user.full_name, email: r.user.email },
+      current_unit: r.currentUnit ? { id: r.currentUnit.id, name: r.currentUnit.name } : null,
+      requested_unit: { id: r.requestedUnit.id, name: r.requestedUnit.name },
+      status: r.status,
+      created_at: r.createdAt ?? r.created_at,
+    }));
+
     res.json({
       success: true,
       message: 'Daftar permintaan perubahan unit',
-      data: requests.map(request => ({
-        id: request.id,
-        user: {
-          id: request.user.id,
-          name: request.user.full_name,
-          email: request.user.email
-        },
-        current_unit: request.currentUnit ? {
-          id: request.currentUnit.id,
-          name: request.currentUnit.name
-        } : null,
-        requested_unit: {
-          id: request.requestedUnit.id,
-          name: request.requestedUnit.name
-        },
-        status: request.status,
-        created_at: request.created_at
-      })),
+      data,
       pagination: {
         total: count,
         totalPages: Math.ceil(count / limit),
         currentPage: page,
       }
     });
-
   } catch (error) {
     console.error('Error in getUnitChangeRequests:', error);
     res.status(500).json({
@@ -601,7 +578,7 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    // 🔐 Generate random password
+    // Generate random password
     const generatedPassword = crypto.randomBytes(6).toString('base64'); // bisa diubah sesuai kebutuhan
     const hashedPassword = await argon2.hash(generatedPassword);
     const encryptedTempPassword = encrypt(generatedPassword);

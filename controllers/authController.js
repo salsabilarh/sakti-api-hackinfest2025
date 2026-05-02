@@ -1,4 +1,3 @@
-// controllers/authController.js
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const { User, Unit, PasswordResetRequest, UnitChangeRequest } = require('../models');
@@ -245,12 +244,15 @@ exports.getProfile = async (req, res) => {
 exports.updatePassword = async (req, res) => {
   try {
     const { current_password, new_password, confirm_password } = req.body;
+    const userId = req.user.id;
 
-    const user = await User.scope('withPassword').findByPk(req.user.id);
+    // Cari user dengan password
+    const user = await User.scope('withPassword').findByPk(userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'User tidak ditemukan' });
     }
 
+    // Validasi password lama
     if (!user.password || user.password.trim() === '') {
       return res.status(400).json({ error: 'Password lama tidak tersedia, tidak dapat diverifikasi' });
     }
@@ -260,24 +262,36 @@ exports.updatePassword = async (req, res) => {
       return res.status(401).json({ error: 'Password lama salah' });
     }
 
+    // Validasi konfirmasi
     if (new_password !== confirm_password) {
       return res.status(400).json({ error: 'Konfirmasi password tidak cocok' });
     }
 
+    // Validasi kekuatan password
     if (!isStrongPassword(new_password)) {
       return res.status(400).json({
         error: 'Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol'
       });
     }
 
+    // Hash password baru
     const hashedPassword = await argon2.hash(new_password);
-    user.password = hashedPassword;
-    user.temporary_password = null; // hapus setelah diganti manual
-    await user.save();
+
+    // Update langsung tanpa transaksi
+    await User.update(
+      {
+        password: hashedPassword,
+        temporary_password: null,
+      },
+      {
+        where: { id: userId },
+        transaction: null, // pastikan tidak membuka transaksi internal
+      }
+    );
 
     res.json({ message: 'Password berhasil diperbarui' });
   } catch (error) {
-    console.error(error);
+    console.error('Update password error:', error);
     res.status(500).json({ error: 'Gagal memperbarui password' });
   }
 };
@@ -286,39 +300,36 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    // Cari user berdasarkan email
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      return res.status(404).json({ error: 'Email not found' });
+      // Jangan bocorkan apakah email terdaftar atau tidak
+      return res.json({
+        message: 'Jika email Anda terdaftar, permintaan reset password telah dikirim ke admin.',
+      });
     }
 
-    // Buat token reset password
-    const resetToken = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_RESET_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    // Simpan token ke database
-    await user.update({
-      reset_token: resetToken,
-      reset_token_expires: new Date(Date.now() + 3600000), // 1 jam dari sekarang
+    // ✅ Cek apakah sudah ada permintaan pending untuk user ini
+    const existingRequest = await PasswordResetRequest.findOne({
+      where: { user_id: user.id, is_processed: false },
     });
 
-    // Buat request reset password
-    await PasswordResetRequest.create({
-      user_id: user.id,
-      is_processed: false,
-    });
+    if (existingRequest) {
+      return res.status(200).json({
+        already_pending: true,
+        message:
+          'Permintaan reset password Anda sebelumnya masih dalam antrean dan sedang menunggu diproses oleh admin. Mohon bersabar dan periksa email Anda secara berkala.',
+      });
+    }
 
-    res.json({ message: 'Password reset request submitted. Please wait for admin to process.' });
+    // Buat request baru jika belum ada
+    await PasswordResetRequest.create({ user_id: user.id });
+
+    return res.json({
+      message: 'Permintaan berhasil dikirim. Admin akan memproses dan mengirimkan password baru ke email Anda.',
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to process forgot password request' });
+    res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
   }
 };
 
