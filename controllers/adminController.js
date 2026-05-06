@@ -667,7 +667,7 @@ exports.getUnitChangeRequests = async (req, res) => {
         { model: Unit, as: 'currentUnit', attributes: ['id', 'name', 'type'] },
         { model: Unit, as: 'requestedUnit', attributes: ['id', 'name', 'type'] },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [['created_at', 'DESC']],
       limit,
       offset,
     });
@@ -687,7 +687,7 @@ exports.getUnitChangeRequests = async (req, res) => {
         : null,
       status: r.status,
       catatan_admin: r.admin_notes,
-      diajukan_pada: r.createdAt || r.created_at,
+      diajukan_pada: r.created_at,
     }));
 
     return res.json({
