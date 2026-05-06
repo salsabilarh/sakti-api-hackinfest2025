@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     purpose: {
       type: DataTypes.TEXT,
-      allowNull: false,
+      allowNull: true,
     },
   }, {
     tableName: 'download_logs',
@@ -18,8 +18,14 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   DownloadLog.associate = (models) => {
-    DownloadLog.belongsTo(models.MarketingKit, { foreignKey: 'marketing_kit_id', as: 'marketing_kit' });
-    DownloadLog.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+    DownloadLog.belongsTo(models.MarketingKit, {
+      foreignKey: 'marketing_kit_id',
+      as: 'marketing_kit',
+    });
+    DownloadLog.belongsTo(models.User, {
+      foreignKey: 'user_id',
+      as: 'user',
+    });
   };
 
   return DownloadLog;

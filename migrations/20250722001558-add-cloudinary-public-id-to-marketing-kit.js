@@ -4,7 +4,7 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.addColumn('marketing_kits', 'cloudinary_public_id', {
       type: Sequelize.STRING(255),
-      allowNull: true, // dibuat nullable agar tidak error saat migrasi data lama
+      allowNull: true,
     });
   },
 

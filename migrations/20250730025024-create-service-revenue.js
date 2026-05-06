@@ -1,4 +1,3 @@
-// migrations/create-service-revenue.js
 'use strict';
 
 module.exports = {

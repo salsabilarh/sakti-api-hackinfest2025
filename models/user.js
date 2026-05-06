@@ -1,3 +1,9 @@
+/**
+ * models/user.js
+ * Model utama untuk data pengguna sistem SAKTI.
+ * Relasi: belongsTo Unit, hasMany Service, MarketingKit, DownloadLog, RefreshToken.
+ */
+
 module.exports = (sequelize, DataTypes) => {
   const User = sequelize.define('User', {
     id: {
@@ -13,9 +19,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(100),
       allowNull: false,
       unique: true,
-      validate: {
-        isEmail: true,
-      },
+      validate: { isEmail: true },
     },
     password: {
       type: DataTypes.TEXT,
@@ -41,6 +45,7 @@ module.exports = (sequelize, DataTypes) => {
     is_verified: {
       type: DataTypes.BOOLEAN,
       defaultValue: null,
+      allowNull: true,
     },
     last_login: {
       type: DataTypes.DATE,
@@ -61,11 +66,14 @@ module.exports = (sequelize, DataTypes) => {
     createdAt: 'created_at',
     updatedAt: 'updated_at',
     defaultScope: {
-      attributes: { exclude: ['password', 'reset_token', 'reset_token_expires'] },
+      attributes: { exclude: ['password', 'reset_token', 'reset_token_expires', 'temporary_password'] },
     },
     scopes: {
       withPassword: {
-        attributes: { include: ['password'] },
+        attributes: { exclude: [] },
+      },
+      publicProfile: {
+        attributes: ['id', 'full_name', 'email', 'role'],
       },
     },
   });
@@ -75,6 +83,7 @@ module.exports = (sequelize, DataTypes) => {
     User.hasMany(models.Service, { foreignKey: 'created_by', as: 'services' });
     User.hasMany(models.MarketingKit, { foreignKey: 'uploaded_by', as: 'marketing_kits' });
     User.hasMany(models.DownloadLog, { foreignKey: 'user_id', as: 'download_logs' });
+    User.hasMany(models.RefreshToken, { foreignKey: 'user_id', as: 'refresh_tokens' });
   };
 
   return User;

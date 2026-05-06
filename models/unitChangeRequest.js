@@ -1,4 +1,11 @@
+/**
+ * models/unitChangeRequest.js
+ * Model untuk menyimpan permintaan perubahan unit kerja oleh user.
+ * Relasi: belongsTo User, belongsTo Unit (currentUnit), belongsTo Unit (requestedUnit).
+ */
+
 'use strict';
+
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
@@ -9,25 +16,38 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.Unit, { foreignKey: 'requested_unit_id', as: 'requestedUnit' });
     }
   }
-  
+
   UnitChangeRequest.init({
-    user_id: DataTypes.UUID, // Ubah ke UUID
-    current_unit_id: DataTypes.UUID, // Ubah ke UUID
-    requested_unit_id: DataTypes.UUID, // Ubah ke UUID
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+    },
+    current_unit_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    requested_unit_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+    },
     status: {
       type: DataTypes.ENUM('pending', 'approved', 'rejected'),
-      defaultValue: 'pending'
+      defaultValue: 'pending',
+      allowNull: false,
     },
-    admin_notes: DataTypes.TEXT
+    admin_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     sequelize,
     modelName: 'UnitChangeRequest',
-    tableName: 'unit_change_requests', // Ubah ke snake_case untuk konsistensi
+    tableName: 'unit_change_requests',
     underscored: true,
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
   });
-  
+
   return UnitChangeRequest;
 };

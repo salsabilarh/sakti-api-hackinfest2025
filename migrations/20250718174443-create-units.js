@@ -1,4 +1,3 @@
-// migrations/create-unit.js
 'use strict';
 
 module.exports = {

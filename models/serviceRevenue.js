@@ -1,4 +1,8 @@
-// models/ServiceRevenue.js
+/**
+ * models/serviceRevenue.js
+ * Model untuk mencatat pendapatan (revenue) dari suatu layanan per pelanggan.
+ * Relasi: Service (belongsTo), Unit (belongsTo).
+ */
 module.exports = (sequelize, DataTypes) => {
   const ServiceRevenue = sequelize.define('ServiceRevenue', {
     id: {

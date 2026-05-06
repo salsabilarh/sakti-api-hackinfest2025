@@ -1,4 +1,3 @@
-// migrations/create-sub-sector.js
 'use strict';
 
 module.exports = {

@@ -10,7 +10,6 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
-    // Kembalikan ke panjang awal jika diperlukan
     await queryInterface.changeColumn('services', 'name', {
       type: Sequelize.STRING(500),
       allowNull: false,
