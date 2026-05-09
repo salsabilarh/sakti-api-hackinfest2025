@@ -20,7 +20,7 @@
  * 4. Hapus file temp dari disk
  * 5. Jika DB INSERT gagal setelah Cloudinary upload berhasil → controller cleanup
  *
- * [Fix N39] cloudinary_public_id tetap NOT NULL untuk integritas data,
+ * cloudinary_public_id tetap NOT NULL untuk integritas data,
  * namun controller bertanggung jawab membersihkan orphan file jika DB gagal.
  *
  * ============================================================
@@ -116,7 +116,7 @@ module.exports = (sequelize, DataTypes) => {
        * cloudinary_public_id - Identifier unik di Cloudinary.
        * Wajib diisi karena dipakai untuk generate signed URL dan menghapus file.
        * NOT NULL menjaga integritas: setiap marketing kit pasti punya file di Cloudinary.
-       * [Fix N39] Jika DB insert gagal setelah Cloudinary upload, controller akan cleanup.
+       * Jika DB insert gagal setelah Cloudinary upload, controller akan cleanup.
        */
       cloudinary_public_id: {
         type: DataTypes.STRING(255),
