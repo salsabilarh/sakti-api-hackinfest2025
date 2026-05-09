@@ -14,7 +14,7 @@
  * ALUR PENCATATAN LOG
  * ============================================================
  * 1. User request download ke POST /api/marketing-kits/:id/download
- * 2. Controller memvalidasi purpose (wajib diisi) sesuai Fix N29
+ * 2. Controller memvalidasi purpose (wajib diisi)
  * 3. Setelah valid, buat record DownloadLog dengan:
  *    - marketing_kit_id: ID kit yang diunduh
  *    - user_id: ID user yang mengunduh

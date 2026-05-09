@@ -1,7 +1,7 @@
 /**
  * models/refreshToken.js
  *
- * Model untuk menyimpan refresh token dalam sistem dual-token authentication (Fix N24).
+ * Model untuk menyimpan refresh token dalam sistem dual-token authentication.
  * Refresh token digunakan untuk mendapatkan access token baru setelah access token kedaluwarsa.
  *
  * ============================================================
