@@ -1,69 +1,54 @@
 /**
- * models/marketingKitService.js
+ * models/serviceSubSector.js
  *
- * Model untuk tabel pivot many-to-many antara MarketingKit dan Service.
- * Tabel ini menghubungkan marketing kit dengan layanan yang terkait.
+ * Model untuk tabel pivot many-to-many antara Service dan SubSector.
+ * Tabel ini menghubungkan layanan dengan sub sektor-sub sektor yang terkait.
  *
  * ============================================================
  * RELASI
  * ============================================================
- * - MarketingKit.belongsToMany(Service) melalui model ini
- * - Service.belongsToMany(MarketingKit) melalui model ini
+ * - Service.belongsToMany(SubSector) melalui model ini
+ * - SubSector.belongsToMany(Service) melalui model ini
  *
  * ============================================================
  * PENGGUNAAN
  * ============================================================
  * Model ini biasanya tidak diakses langsung, melainkan melalui
- * metode Sequelize seperti `marketingKit.addServices()` atau
- * `service.addMarketingKits()`.
+ * metode Sequelize seperti `service.addSub_sectors()` atau
+ * `subSector.addServices()`.
  *
  * ============================================================
  * PANDUAN MAINTENANCE
  * ============================================================
  * - Jangan menambahkan kolom tambahan ke tabel ini kecuali benar-benar diperlukan.
- * - Jika diperlukan metadata relasi (misal: tanggal assignment), buat migrasi baru.
- * - Tabel ini menggunakan composite primary key (marketing_kit_id, service_id).
- * - Timestamps: hanya created_at (updated_at dimatikan) karena relasi tidak berubah.
+ * - Tabel ini menggunakan composite primary key (service_id, sub_sector_id).
+ * - Timestamps (created_at, updated_at) disediakan untuk audit perubahan relasi.
+ * - Hapus defaultValue UUIDV4 pada service_id karena nilai harus berasal dari service yang ada.
  */
 
 'use strict';
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
-  class MarketingKitService extends Model {
+  class ServiceSubSector extends Model {
     /**
      * Mendefinisikan asosiasi dengan model lain.
-     * Untuk pivot many-to-many, asosiasi didefinisikan di model MarketingKit dan Service.
+     * Untuk pivot many-to-many, asosiasi didefinisikan di model Service dan SubSector.
      *
      * @param {Object} models - Semua model yang terdaftar
      */
     static associate(models) {
       // Asosiasi tidak perlu didefinisikan di sini karena sudah ditangani
-      // oleh belongsToMany di model MarketingKit dan Service.
+      // oleh belongsToMany di model Service dan SubSector.
     }
   }
 
-  MarketingKitService.init(
+  ServiceSubSector.init(
     {
-      /**
-       * marketing_kit_id - Foreign key ke tabel marketing_kits.
-       * Bagian dari composite primary key.
-       */
-      marketing_kit_id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true,
-        allowNull: false,
-        references: {
-          model: 'marketing_kits',
-          key: 'id',
-        },
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
-      },
       /**
        * service_id - Foreign key ke tabel services.
        * Bagian dari composite primary key.
+       * CATATAN: JANGAN beri defaultValue UUIDV4 karena nilai harus berasal dari service yang ada.
        */
       service_id: {
         type: DataTypes.UUID,
@@ -76,17 +61,32 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',
       },
+      /**
+       * sub_sector_id - Foreign key ke tabel sub_sectors.
+       * Bagian dari composite primary key.
+       */
+      sub_sector_id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+        references: {
+          model: 'sub_sectors',
+          key: 'id',
+        },
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      },
     },
     {
       sequelize,
-      modelName: 'MarketingKitService',
-      tableName: 'marketing_kit_services',
+      modelName: 'ServiceSubSector',
+      tableName: 'service_sub_sectors',
       underscored: true,
       timestamps: true,
       createdAt: 'created_at',
-      updatedAt: false, // Tidak perlu updated_at untuk tabel pivot statis
+      updatedAt: 'updated_at',
     }
   );
 
-  return MarketingKitService;
+  return ServiceSubSector;
 };

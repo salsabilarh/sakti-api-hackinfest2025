@@ -39,86 +39,82 @@
  * - User.hasMany(RefreshToken) as 'refresh_tokens' (didefinisikan di models/user.js)
  */
 
+'use strict';
+const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
-  const RefreshToken = sequelize.define('RefreshToken', {
-    /**
-     * id - UUID primary key, tidak dapat di-enumerate.
-     */
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4,
-    },
+  class RefreshToken extends Model {
+    static associate(models) {
+      RefreshToken.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+    }
+  }
 
-    /**
-     * token_hash - SHA-256 hash dari raw refresh token.
-     * Raw token dikirim ke client, hash disimpan di DB.
-     * Validasi: `hash(client_token) === token_hash`
-     *
-     * Panjang: 64 karakter hex (hasil SHA-256)
-     */
-    token_hash: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      unique: true, // Satu hash hanya boleh muncul sekali
-    },
-
-    /**
-     * user_id - Foreign key ke users.id.
-     * Diperlukan untuk:
-     * - Revoke semua token user saat logout-all
-     * - Admin menonaktifkan akun → revoke semua token
-     * - User ganti password → revoke semua token
-     */
-    user_id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
+  RefreshToken.init(
+    {
+      /**
+       * id - UUID primary key, tidak dapat di-enumerate.
+       */
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        defaultValue: DataTypes.UUIDV4,
+        collate: 'utf8mb4_bin',
       },
-      onDelete: 'CASCADE', // Jika user dihapus, hapus semua refresh token-nya
-      onUpdate: 'CASCADE',
+      /**
+       * token_hash - SHA-256 hash dari raw refresh token.
+       * Raw token dikirim ke client, hash disimpan di DB.
+       * Validasi: `hash(client_token) === token_hash`
+       * Panjang: 64 karakter hex (hasil SHA-256).
+       */
+      token_hash: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        unique: true,
+      },
+      /**
+       * user_id - Foreign key ke users.id.
+       * Diperlukan untuk revoke semua token user saat logout-all atau ganti password.
+       */
+      user_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+          model: 'users',
+          key: 'id',
+        },
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      },
+      /**
+       * expires_at - Batas waktu token masih dianggap valid.
+       * Default diisi di controller: `created_at + REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000`
+       * Token yang sudah expired tidak dapat digunakan meskipun is_revoked = false.
+       */
+      expires_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      /**
+       * is_revoked - Status revokasi token.
+       * false: token aktif (masih dalam masa berlaku)
+       * true:  token sudah di-revoke (logout, ganti password, admin revoke)
+       */
+      is_revoked: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+      },
     },
-
-    /**
-     * expires_at - Batas waktu token masih dianggap valid.
-     * Default diisi di controller: `Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000`
-     * Token yang sudah expired tidak dapat digunakan meskipun is_revoked = false.
-     */
-    expires_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-    },
-
-    /**
-     * is_revoked - Status revokasi token.
-     * - false: token aktif (masih dalam masa berlaku)
-     * - true:  token sudah di-revoke (logout, ganti password, admin revoke)
-     */
-    is_revoked: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-  }, {
-    tableName: 'refresh_tokens',
-    timestamps: true,
-    underscored: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-  });
-
-  RefreshToken.associate = (models) => {
-    /**
-     * Relasi many-to-one ke User.
-     * Satu user bisa memiliki banyak refresh token (multiple devices/sessions).
-     */
-    RefreshToken.belongsTo(models.User, {
-      foreignKey: 'user_id',
-      as: 'user',
-    });
-  };
+    {
+      sequelize,
+      modelName: 'RefreshToken',
+      tableName: 'refresh_tokens',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    }
+  );
 
   return RefreshToken;
 };

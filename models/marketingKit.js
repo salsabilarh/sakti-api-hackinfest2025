@@ -8,7 +8,7 @@
  * RELASI
  * ============================================================
  * - MarketingKit.belongsTo(User) as 'uploader' (uploader dapat dihapus → SET NULL)
- * - MarketingKit.belongsToMany(Service) through 'MarketingKitService'
+ * - MarketingKit.belongsToMany(Service) through 'MarketingKitService' as 'services'
  * - MarketingKit.hasMany(DownloadLog) as 'download_logs'
  *
  * ============================================================
@@ -42,102 +42,97 @@
  *   (sudah dilakukan di controller deleteMarketingKit).
  */
 
+'use strict';
+const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
-  const MarketingKit = sequelize.define('MarketingKit', {
-    /**
-     * id - UUID primary key, tidak dapat di-enumerate.
-     */
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4,
-    },
+  class MarketingKit extends Model {
+    static associate(models) {
+      // Uploader (user yang mengupload)
+      MarketingKit.belongsTo(models.User, {
+        foreignKey: 'uploaded_by',
+        as: 'uploader',
+      });
 
-    /**
-     * name - Nama tampilan marketing kit.
-     * Default diambil dari nama file upload (tanpa ekstensi), dapat diupdate manual.
-     */
-    name: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-    },
+      // Many-to-many dengan Service (pivot: marketing_kit_services)
+      MarketingKit.belongsToMany(models.Service, {
+        through: 'marketing_kit_services',
+        foreignKey: 'marketing_kit_id',
+        otherKey: 'service_id',
+        as: 'services',
+        timestamps: true, // pivot memiliki created_at/updated_at
+      });
 
-    /**
-     * file_type - Kategori bisnis marketing kit.
-     * Contoh: 'Brosur', 'Proposal', 'Presentasi', 'Laporan', 'Datasheet'
-     * BUKAN tipe teknis (pdf/docx) — itu bisa dilihat dari ekstensi file_path.
-     */
-    file_type: {
-      type: DataTypes.STRING(50),
-      allowNull: false,
-    },
+      // Log download (audit trail)
+      MarketingKit.hasMany(models.DownloadLog, {
+        foreignKey: 'marketing_kit_id',
+        as: 'download_logs',
+      });
+    }
+  }
 
-    /**
-     * file_path - URL publik ke file di Cloudinary.
-     * Ini hanya untuk referensi visual, BUKAN link download langsung.
-     * Download menggunakan signed URL yang di-generate via controller.
-     */
-    file_path: {
-      type: DataTypes.TEXT,
-      allowNull: false,
-    },
-
-    /**
-     * cloudinary_public_id - Identifier unik di Cloudinary.
-     * Wajib diisi karena dipakai untuk generate signed URL dan menghapus file.
-     * NOT NULL menjaga integritas: setiap marketing kit pasti punya file di Cloudinary.
-     * [Fix N39] Jika DB insert gagal setelah Cloudinary upload, controller akan cleanup.
-     */
-    cloudinary_public_id: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-      unique: true,
-    },
-
-    /**
-     * uploaded_by - ID user yang mengupload (FK ke users.id).
-     * Nullable karena mungkin ada data lama tanpa pencatat uploader.
-     * Jika user dihapus, field ini di-set NULL (bukan CASCADE DELETE).
-     */
-    uploaded_by: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id',
+  MarketingKit.init(
+    {
+      /**
+       * id - UUID primary key, tidak dapat di-enumerate.
+       */
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        defaultValue: DataTypes.UUIDV4,
+        collate: 'utf8mb4_bin',
       },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
+
+      /**
+       * name - Nama tampilan marketing kit.
+       * Default diambil dari nama file upload (tanpa ekstensi), dapat diupdate manual.
+       */
+      name: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+      },
+
+      /**
+       * file_path - URL publik ke file di Cloudinary.
+       * Ini hanya untuk referensi visual, BUKAN link download langsung.
+       * Download menggunakan signed URL yang di-generate via controller.
+       */
+      file_path: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+
+      /**
+       * file_type - Kategori bisnis marketing kit.
+       * Contoh: 'Flyer', 'Pitch Deck', 'Brochure', 'Technical Document', 'Others'
+       * BUKAN tipe teknis (pdf/docx) — itu bisa dilihat dari ekstensi file_path.
+       */
+      file_type: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+
+      /**
+       * cloudinary_public_id - Identifier unik di Cloudinary.
+       * Wajib diisi karena dipakai untuk generate signed URL dan menghapus file.
+       * NOT NULL menjaga integritas: setiap marketing kit pasti punya file di Cloudinary.
+       * [Fix N39] Jika DB insert gagal setelah Cloudinary upload, controller akan cleanup.
+       */
+      cloudinary_public_id: {
+        type: DataTypes.STRING(255),
+        allowNull: true, // Bisa null untuk kompatibilitas, tapi sebaiknya NOT NULL di produksi
+      },
     },
-  }, {
-    tableName: 'marketing_kits',
-    timestamps: true,
-    underscored: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-  });
-
-  MarketingKit.associate = (models) => {
-    // Uploader (user yang mengupload)
-    MarketingKit.belongsTo(models.User, {
-      foreignKey: 'uploaded_by',
-      as: 'uploader',
-    });
-
-    // Many-to-many dengan Service (pivot: marketing_kit_services)
-    MarketingKit.belongsToMany(models.Service, {
-      through: models.MarketingKitService,
-      foreignKey: 'marketing_kit_id',
-      otherKey: 'service_id',
-      as: 'services',
-    });
-
-    // Log download (audit trail)
-    MarketingKit.hasMany(models.DownloadLog, {
-      foreignKey: 'marketing_kit_id',
-      as: 'download_logs',
-    });
-  };
+    {
+      sequelize,
+      modelName: 'MarketingKit',
+      tableName: 'marketing_kits',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    }
+  );
 
   return MarketingKit;
 };
