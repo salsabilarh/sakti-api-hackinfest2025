@@ -1,47 +1,48 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('sub_portfolios', {
       id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         primaryKey: true,
-        defaultValue: Sequelize.UUIDV4,
+        collate: 'utf8mb4_bin'
       },
       name: {
         type: Sequelize.STRING(255),
         allowNull: false,
-        unique: true,
+        unique: true
       },
       code: {
         type: Sequelize.STRING(20),
         allowNull: false,
-        unique: true,
+        unique: true
       },
       portfolio_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: false,
         references: {
           model: 'portfolios',
-          key: 'id',
+          key: 'id'
         },
-        onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+        collate: 'utf8mb4_bin'
       },
       created_at: {
         type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
       updated_at: {
         type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
-      },
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+      }
     });
+
+    await queryInterface.addIndex('sub_portfolios', ['portfolio_id']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('sub_portfolios');
   }
 };

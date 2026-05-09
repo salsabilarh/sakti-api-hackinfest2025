@@ -9,7 +9,7 @@
  * - Profil pengguna
  * - Ganti password (user sendiri)
  * - Lupa password (membuat permintaan reset untuk diproses admin)
- * - Permintaan pindah unit kerja
+ * - Permintaan perubahan role dan/atau unit kerja
  *
  * ============================================================
  * ALUR DUAL-TOKEN
@@ -35,9 +35,7 @@
  * 1. Password diverifikasi SEBELUM pengecekan is_verified/is_active
  *    → Mencegah user enumeration melalui pesan error.
  * 2. Refresh token disimpan sebagai SHA-256 hash, bukan plain text.
- * 3. Semua endpoint yang membutuhkan autentikasi dilindungi oleh
- *    middleware authenticate() yang memverifikasi JWT access token.
- * 4. Logout menghapus refresh token dari DB (tidak hanya menghapus cookie).
+ * 3. Logout menghapus refresh token dari DB (tidak hanya menghapus cookie).
  */
 
 // ============================================================
@@ -52,7 +50,7 @@ const {
   Unit,
   RefreshToken,
   PasswordResetRequest,
-  UnitChangeRequest,
+  ChangeRequest,
 } = require('../models');
 
 // ============================================================
@@ -62,10 +60,6 @@ const {
 /**
  * Membaca dan membersihkan environment variable dari inline comment.
  *
- * Baris .env seperti: `ACCESS_TOKEN_EXPIRES_IN=15m    // comment`
- * akan dibaca oleh dotenv sebagai `"15m    // comment"` yang menyebabkan
- * jwt.sign() gagal. Fungsi ini membuang semua karakter setelah '//' atau '#'.
- *
  * @param {string} envKey   - Nama environment variable
  * @param {string} fallback - Nilai default jika tidak tersedia
  * @returns {string} Nilai bersih tanpa komentar dan spasi ekstra
@@ -73,7 +67,6 @@ const {
 function readEnvDuration(envKey, fallback) {
   const raw = process.env[envKey];
   if (!raw) return fallback;
-  // Buang inline comment dan whitespace
   return raw.split('//')[0].split('#')[0].trim();
 }
 
@@ -106,7 +99,6 @@ const REFRESH_TOKEN_EXPIRES_DAYS = readEnvInt('REFRESH_TOKEN_EXPIRES_DAYS', 7);
 
 /**
  * Membuat JWT access token (berumur pendek).
- * Token berisi minimal `id` dan `role` untuk keperluan otorisasi.
  *
  * @param {string} userId - UUID pengguna
  * @param {string} role   - Role pengguna ('admin', 'management', 'viewer')
@@ -126,13 +118,11 @@ function generateAccessToken(userId, role) {
 
 /**
  * Membuat pasangan refresh token (raw + hash).
- * Raw token dikirim ke client, hash disimpan di database.
- * Hash menggunakan SHA-256 satu arah sehingga jika DB bocor, token tidak bisa dipakai.
  *
  * @returns {{ rawToken: string, tokenHash: string }}
  */
 function generateRefreshToken() {
-  const rawToken = crypto.randomBytes(40).toString('hex'); // 80 karakter hex
+  const rawToken = crypto.randomBytes(40).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   return { rawToken, tokenHash };
 }
@@ -153,9 +143,9 @@ function hashRefreshToken(rawToken) {
 
 /**
  * Memeriksa kekuatan password.
- * Kriteria: minimal 8 karakter, mengandung huruf besar, huruf kecil, angka, dan simbol.
+ * Kriteria: minimal 8 karakter, huruf besar, huruf kecil, angka, simbol.
  *
- * @param {string} password - Password yang akan divalidasi
+ * @param {string} password
  * @returns {boolean}
  */
 function isStrongPassword(password) {
@@ -163,7 +153,7 @@ function isStrongPassword(password) {
 }
 
 /**
- * Memvalidasi format email sederhana (sesuai RFC 5322 basic).
+ * Memvalidasi format email sederhana.
  *
  * @param {string} email
  * @returns {boolean}
@@ -178,7 +168,6 @@ function isValidEmail(email) {
 
 /**
  * Membangun objek user yang aman untuk dikirim ke client.
- * Field sensitif (password, token) tidak pernah disertakan.
  *
  * @param {Object} user - Instance model User
  * @param {Object|null} unit - Instance model Unit (opsional)
@@ -203,49 +192,37 @@ function buildUserResponse(user, unit = null) {
 /**
  * POST /api/auth/register
  *
- * Mendaftarkan akun baru.
- * Status awal: is_verified = null (menunggu persetujuan admin).
- * Role 'admin' tidak bisa didaftar melalui endpoint ini demi keamanan.
+ * Mendaftarkan akun baru. Status awal: is_verified = null (menunggu persetujuan admin).
+ * Role 'admin' tidak bisa didaftar melalui endpoint publik.
  */
 exports.register = async (req, res) => {
   try {
     const { full_name, email, password, confirm_password, unit_kerja_id, role } = req.body;
 
-    // Validasi kehadiran field
     if (!full_name || !email || !password || !confirm_password || !role) {
       return res.status(400).json({
         success: false,
         pesan: 'Nama lengkap, email, password, konfirmasi password, dan role wajib diisi',
       });
     }
-
-    // Validasi format email
     if (!isValidEmail(email)) {
       return res.status(400).json({ success: false, pesan: 'Format email tidak valid' });
     }
-
-    // Validasi kecocokan password
     if (password !== confirm_password) {
       return res.status(400).json({ success: false, pesan: 'Konfirmasi password tidak cocok' });
     }
-
-    // Validasi kekuatan password
     if (!isStrongPassword(password)) {
       return res.status(400).json({
         success: false,
         pesan: 'Password harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol',
       });
     }
-
-    // Cegah registrasi role admin via endpoint publik
     if (role === 'admin') {
       return res.status(403).json({
         success: false,
         pesan: 'Pendaftaran akun Admin tidak diizinkan melalui endpoint ini',
       });
     }
-
-    // Validasi unit kerja untuk role non-admin
     if (!unit_kerja_id) {
       return res.status(400).json({ success: false, pesan: 'Unit kerja wajib diisi' });
     }
@@ -255,13 +232,11 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, pesan: 'Unit kerja tidak valid' });
     }
 
-    // Cek duplikasi email
     const existingUser = await User.findOne({ where: { email: email.trim() } });
     if (existingUser) {
       return res.status(409).json({ success: false, pesan: 'Email sudah terdaftar' });
     }
 
-    // Hash password dan simpan user
     const hashedPassword = await argon2.hash(password);
     const newUser = await User.create({
       full_name: full_name.trim(),
@@ -269,7 +244,7 @@ exports.register = async (req, res) => {
       password: hashedPassword,
       unit_kerja_id,
       role,
-      is_verified: null, // menunggu verifikasi admin
+      is_verified: null,
       is_active: true,
     });
 
@@ -300,13 +275,7 @@ exports.register = async (req, res) => {
  * POST /api/auth/login
  *
  * Autentikasi user dan mengembalikan access token + refresh token.
- *
- * Urutan validasi (mencegah user enumeration):
- * 1. Cek keberadaan user → pesan GENERIK
- * 2. Verifikasi password → pesan GENERIK (sama dengan langkah 1)
- * 3. Cek is_verified → pesan SPESIFIK (karena password sudah benar)
- * 4. Cek is_active → pesan SPESIFIK
- * 5. Update last_login dan generate token pair
+ * Urutan validasi mencegah user enumeration.
  */
 exports.login = async (req, res) => {
   try {
@@ -316,13 +285,11 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, pesan: 'Email dan password wajib diisi' });
     }
 
-    // Cari user termasuk password (scope 'withPassword') dan relasi unit
     const user = await User.scope('withPassword').findOne({
       where: { email: email.trim() },
       include: [{ model: Unit, as: 'unit', attributes: ['id', 'name'] }],
     });
 
-    // Langkah 1 & 2: Pesan generik tidak membedakan "user tidak ada" vs "password salah"
     if (!user) {
       return res.status(401).json({ success: false, pesan: 'Email atau password salah' });
     }
@@ -332,14 +299,12 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, pesan: 'Email atau password salah' });
     }
 
-    // Langkah 3 & 4: Setelah password diverifikasi, boleh kasih pesan spesifik
     if (user.is_verified !== true) {
       return res.status(403).json({
         success: false,
         pesan: 'Akun belum diverifikasi oleh admin. Silakan tunggu atau hubungi admin.',
       });
     }
-
     if (!user.is_active) {
       return res.status(403).json({
         success: false,
@@ -347,10 +312,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Update last_login (digunakan untuk statistik pengguna aktif)
     await user.update({ last_login: new Date() });
 
-    // Generate token pair
     const accessToken = generateAccessToken(user.id, user.role);
     const { rawToken, tokenHash } = generateRefreshToken();
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
@@ -384,12 +347,10 @@ exports.login = async (req, res) => {
  * POST /api/auth/refresh
  *
  * Menukar refresh token yang valid dengan access token baru.
- * Tidak memerlukan access token (karena biasanya digunakan saat access token sudah expired).
  */
 exports.refreshToken = async (req, res) => {
   try {
     const { refresh_token } = req.body;
-
     if (!refresh_token) {
       return res.status(400).json({ success: false, pesan: 'Refresh token diperlukan' });
     }
@@ -401,13 +362,7 @@ exports.refreshToken = async (req, res) => {
         is_revoked: false,
         expires_at: { [Op.gt]: new Date() },
       },
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'full_name', 'email', 'role', 'is_active', 'is_verified'],
-        },
-      ],
+      include: [{ model: User, as: 'user', attributes: ['id', 'full_name', 'email', 'role', 'is_active', 'is_verified'] }],
     });
 
     if (!storedToken) {
@@ -418,19 +373,10 @@ exports.refreshToken = async (req, res) => {
     }
 
     const { user } = storedToken;
-
-    // Pastikan akun masih aktif dan terverifikasi
     if (!user.is_active) {
-      await RefreshToken.update(
-        { is_revoked: true },
-        { where: { user_id: user.id } }
-      );
-      return res.status(403).json({
-        success: false,
-        pesan: 'Akun telah dinonaktifkan. Hubungi admin.',
-      });
+      await RefreshToken.update({ is_revoked: true }, { where: { user_id: user.id } });
+      return res.status(403).json({ success: false, pesan: 'Akun telah dinonaktifkan. Hubungi admin.' });
     }
-
     if (user.is_verified !== true) {
       return res.status(403).json({ success: false, pesan: 'Akun belum terverifikasi.' });
     }
@@ -456,12 +402,10 @@ exports.refreshToken = async (req, res) => {
  * DELETE /api/auth/logout
  *
  * Me-revoke satu refresh token (logout dari perangkat tertentu).
- * Memerlukan refresh_token di body request.
  */
 exports.logout = async (req, res) => {
   try {
     const { refresh_token } = req.body;
-
     if (!refresh_token) {
       return res.status(400).json({ success: false, pesan: 'Refresh token diperlukan untuk logout' });
     }
@@ -472,13 +416,11 @@ exports.logout = async (req, res) => {
       {
         where: {
           token_hash: tokenHash,
-          user_id: req.user.id, // Keamanan ekstra: hanya revoke token milik user yang sedang login
+          user_id: req.user.id,
           is_revoked: false,
         },
       }
     );
-
-    // Selalu kembalikan sukses untuk mencegah token enumeration
     return res.json({ success: true, pesan: 'Logout berhasil' });
   } catch (error) {
     console.error('[logout] Error:', error);
@@ -493,7 +435,7 @@ exports.logout = async (req, res) => {
 /**
  * DELETE /api/auth/logout-all
  *
- * Me-revoke semua refresh token milik user yang sedang login (logout dari semua perangkat).
+ * Me-revoke semua refresh token milik user (logout dari semua perangkat).
  */
 exports.logoutAll = async (req, res) => {
   try {
@@ -501,7 +443,6 @@ exports.logoutAll = async (req, res) => {
       { is_revoked: true },
       { where: { user_id: req.user.id, is_revoked: false } }
     );
-
     return res.json({
       success: true,
       pesan: `Logout dari semua device berhasil. ${revokedCount} sesi aktif dihentikan.`,
@@ -519,8 +460,7 @@ exports.logoutAll = async (req, res) => {
 /**
  * GET /api/auth/profile
  *
- * Mengambil profil pengguna yang sedang login dari database (bukan hanya dari JWT payload).
- * Memastikan data selalu mutakhir meskipun ada perubahan setelah token diterbitkan.
+ * Mengambil profil pengguna yang sedang login (data terkini dari DB).
  */
 exports.getProfile = async (req, res) => {
   try {
@@ -528,11 +468,9 @@ exports.getProfile = async (req, res) => {
       attributes: ['id', 'full_name', 'email', 'role', 'last_login', 'created_at'],
       include: [{ model: Unit, as: 'unit', attributes: ['id', 'name', 'type'] }],
     });
-
     if (!user) {
       return res.status(404).json({ success: false, pesan: 'User tidak ditemukan' });
     }
-
     return res.json({
       success: true,
       data: {
@@ -540,9 +478,7 @@ exports.getProfile = async (req, res) => {
         full_name: user.full_name,
         email: user.email,
         role: user.role,
-        unit_kerja: user.unit
-          ? { id: user.unit.id, name: user.unit.name, type: user.unit.type }
-          : null,
+        unit_kerja: user.unit ? { id: user.unit.id, name: user.unit.name, type: user.unit.type } : null,
         last_login: user.last_login,
         bergabung: user.created_at,
       },
@@ -556,9 +492,7 @@ exports.getProfile = async (req, res) => {
 /**
  * PUT /api/auth/update-password
  *
- * Pengguna mengganti password sendiri.
- * Setelah berhasil, semua refresh token direvoke (logout dari semua perangkat)
- * sehingga pengguna harus login ulang dengan password baru.
+ * Pengguna mengganti password sendiri. Setelah berhasil, semua refresh token direvoke.
  */
 exports.updatePassword = async (req, res) => {
   try {
@@ -577,7 +511,6 @@ exports.updatePassword = async (req, res) => {
       return res.status(404).json({ success: false, pesan: 'User tidak ditemukan' });
     }
 
-    // Verifikasi password lama
     if (!user.password) {
       return res.status(400).json({
         success: false,
@@ -590,19 +523,13 @@ exports.updatePassword = async (req, res) => {
       return res.status(401).json({ success: false, pesan: 'Password lama salah' });
     }
 
-    // Cegah password baru sama dengan lama
     const sameAsOld = await argon2.verify(user.password, new_password);
     if (sameAsOld) {
-      return res.status(400).json({
-        success: false,
-        pesan: 'Password baru tidak boleh sama dengan password lama',
-      });
+      return res.status(400).json({ success: false, pesan: 'Password baru tidak boleh sama dengan password lama' });
     }
-
     if (new_password !== confirm_password) {
       return res.status(400).json({ success: false, pesan: 'Konfirmasi password tidak cocok' });
     }
-
     if (!isStrongPassword(new_password)) {
       return res.status(400).json({
         success: false,
@@ -610,11 +537,9 @@ exports.updatePassword = async (req, res) => {
       });
     }
 
-    // Hash password baru dan hapus temporary_password (jika ada)
     const hashedPassword = await argon2.hash(new_password);
     await user.update({ password: hashedPassword, temporary_password: null });
 
-    // Revoke semua refresh token → paksa login ulang di semua device
     await RefreshToken.update(
       { is_revoked: true },
       { where: { user_id: userId, is_revoked: false } }
@@ -634,19 +559,16 @@ exports.updatePassword = async (req, res) => {
  * POST /api/auth/forgot-password
  *
  * Membuat permintaan reset password untuk diproses oleh admin.
- * Response sama (tidak membedakan email terdaftar atau tidak) untuk mencegah email enumeration.
+ * Response sama untuk email terdaftar maupun tidak (mencegah enumeration).
  */
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-
     if (!email) {
       return res.status(400).json({ success: false, pesan: 'Email wajib diisi' });
     }
 
     const user = await User.findOne({ where: { email: email.trim() } });
-
-    // Jika user tidak ditemukan, tetap beri response sukses (pencegahan enumeration)
     if (!user) {
       return res.json({
         success: true,
@@ -654,11 +576,9 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // Cek apakah sudah ada permintaan pending untuk user ini
     const existingRequest = await PasswordResetRequest.findOne({
       where: { user_id: user.id, is_processed: false },
     });
-
     if (existingRequest) {
       return res.json({
         success: true,
@@ -668,84 +588,104 @@ exports.forgotPassword = async (req, res) => {
     }
 
     await PasswordResetRequest.create({ user_id: user.id });
-
     return res.json({
       success: true,
       pesan: 'Permintaan berhasil dikirim. Admin akan memproses dan menghubungi Anda melalui email atau saluran resmi.',
     });
   } catch (error) {
     console.error('[forgotPassword] Error:', error);
-    return res.status(500).json({
-      success: false,
-      pesan: 'Terjadi kesalahan. Silakan coba lagi.',
-    });
+    return res.status(500).json({ success: false, pesan: 'Terjadi kesalahan. Silakan coba lagi.' });
   }
 };
 
 /**
- * POST /api/auth/unit-change-request
+ * POST /api/auth/change-request
  *
- * Pengguna (non-admin) mengajukan permintaan pindah unit kerja.
- * Hanya satu permintaan dengan status 'pending' yang diperbolehkan per user.
- * Admin akan menyetujui/menolak melalui endpoint terpisah.
+ * Pengguna mengajukan permintaan perubahan role dan/atau unit kerja.
+ * Minimal salah satu dari requested_role atau requested_unit_id harus diisi.
+ * Hanya satu permintaan pending per user.
  */
-exports.requestUnitChange = async (req, res) => {
+exports.requestChange = async (req, res) => {
   try {
-    const { requested_unit_id } = req.body;
+    const { requested_role, requested_unit_id } = req.body;
     const userId = req.user.id;
 
-    if (!requested_unit_id) {
-      return res.status(400).json({ success: false, pesan: 'Unit tujuan harus dipilih' });
+    if (!requested_role && !requested_unit_id) {
+      return res.status(400).json({
+        success: false,
+        pesan: 'Harap isi minimal satu: role yang diminta atau unit tujuan',
+      });
     }
 
     const user = await User.findByPk(userId, {
       include: [{ model: Unit, as: 'unit', attributes: ['id'] }],
     });
+    if (!user) return res.status(404).json({ success: false, pesan: 'User tidak ditemukan' });
 
-    if (!user) {
-      return res.status(404).json({ success: false, pesan: 'User tidak ditemukan' });
+    // Validasi role
+    if (requested_role && !['admin', 'management', 'viewer'].includes(requested_role)) {
+      return res.status(400).json({ success: false, pesan: 'Role tidak valid' });
     }
 
-    // Cegah jika user sudah berada di unit yang sama
-    if (user.unit && String(user.unit.id) === String(requested_unit_id)) {
-      return res.status(400).json({ success: false, pesan: 'Anda sudah berada di unit ini' });
+    // Validasi unit jika ada
+    if (requested_unit_id) {
+      const unit = await Unit.findByPk(requested_unit_id);
+      if (!unit) return res.status(404).json({ success: false, pesan: 'Unit tujuan tidak ditemukan' });
+      if (user.unit && String(user.unit.id) === String(requested_unit_id) && !requested_role) {
+        return res.status(400).json({ success: false, pesan: 'Anda sudah berada di unit ini' });
+      }
     }
 
-    const requestedUnit = await Unit.findByPk(requested_unit_id);
-    if (!requestedUnit) {
-      return res.status(404).json({ success: false, pesan: 'Unit yang diminta tidak ditemukan' });
+    // Cek duplikasi role
+    if (requested_role && requested_role === user.role && !requested_unit_id) {
+      return res.status(400).json({ success: false, pesan: 'Anda sudah memiliki role ini' });
     }
 
-    // Cek apakah sudah ada permintaan pending
-    const existingRequest = await UnitChangeRequest.findOne({
+    // Cek existing pending request
+    const existing = await ChangeRequest.findOne({
       where: { user_id: userId, status: 'pending' },
     });
-
-    if (existingRequest) {
+    if (existing) {
       return res.status(409).json({
         success: false,
-        pesan: 'Anda sudah memiliki permintaan perubahan unit yang sedang diproses. Tunggu hingga selesai.',
+        pesan: 'Anda sudah memiliki permintaan perubahan yang sedang diproses.',
       });
     }
 
-    const unitChangeRequest = await UnitChangeRequest.create({
+    const changeRequest = await ChangeRequest.create({
       user_id: userId,
       current_unit_id: user.unit ? user.unit.id : null,
-      requested_unit_id,
+      requested_unit_id: requested_unit_id || null,
+      requested_role: requested_role || null,
       status: 'pending',
     });
 
+    const pesan =
+      requested_role && requested_unit_id
+        ? 'Permintaan perubahan role dan unit berhasil diajukan.'
+        : requested_role
+        ? 'Permintaan perubahan role berhasil diajukan.'
+        : 'Permintaan perubahan unit berhasil diajukan.';
+
     return res.status(201).json({
       success: true,
-      pesan: 'Permintaan perubahan unit berhasil diajukan. Admin akan memprosesnya segera.',
-      data: unitChangeRequest,
+      pesan,
+      data: changeRequest,
     });
   } catch (error) {
-    console.error('[requestUnitChange] Error:', error);
-    return res.status(500).json({
-      success: false,
-      pesan: 'Gagal mengajukan permintaan perubahan unit',
-      ...(process.env.NODE_ENV === 'development' && { detail: error.message }),
-    });
+    console.error('[requestChange] Error:', error);
+    return res.status(500).json({ success: false, pesan: 'Gagal mengajukan permintaan' });
   }
+};
+
+/**
+ * POST /api/auth/change-request (DEPRECATED)
+ *
+ * Versi lama hanya untuk perubahan unit. Sebaiknya gunakan /change-request yang lebih umum.
+ * Tetap disediakan untuk kompatibilitas mundur, tetapi akan mengarahkan ke fungsi requestChange.
+ */
+exports.requestUnitChange = async (req, res) => {
+  // Redirect ke fungsi baru dengan hanya unit saja
+  req.body = { requested_unit_id: req.body.requested_unit_id };
+  return exports.requestChange(req, res);
 };

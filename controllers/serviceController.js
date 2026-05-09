@@ -7,41 +7,6 @@
  * - Data Revenue (pendapatan dari pelanggan)
  *
  * ============================================================
- * DAFTAR PERBAIKAN DALAM FILE INI
- * ============================================================
- * [Fix #9  — Medium]   Duplicate JOIN saat filter + sort menggunakan model yang sama.
- *   → Pisahkan filterInclude (WHERE) dari displayInclude (SELECT).
- *
- * [Fix #10 — Medium]   createService() tidak memvalidasi field wajib.
- *   → Tambahkan validasi name dan keberadaan portfolio/sub_portfolio di DB.
- *
- * [Fix #11 — Low]      Error object mentah dikembalikan ke client.
- *   → Kembalikan pesan generik; detail hanya di NODE_ENV=development.
- *
- * [Fix #12 — Low]      revenue tidak divalidasi sebagai angka positif.
- *   → Konversi ke Number() dan validasi >= 0.
- *
- * [Fix N27 — Critical] updateService() mengirim undefined ke update() yang dapat mengosongkan field.
- *   → Gunakan !== undefined check dan fallback ke nilai existing.
- *
- * [Fix N31 — Medium]   `if (sectors)` mengevaluasi array kosong sebagai falsy.
- *   → Ganti dengan `if (sectors !== undefined)` agar bisa hapus semua relasi.
- *
- * [Fix N34 — Medium]   createService() tidak memvalidasi portfolio_id dan sub_portfolio_id di DB.
- *   → Tambahkan findByPk check sebelum create.
- *
- * [Fix N37 — Low]      Parameter order tidak dinormalisasi uppercase.
- *   → Normalisasi ke 'ASC' atau 'DESC'.
- *
- * [Fix N38 — Low]      name tidak di-trim sebelum duplicate check.
- *   → Tambahkan .trim() sebelum findOne dan create.
- *
- * [Fix N41 — Low]      Import xlsx tidak digunakan → dihapus.
- * [Fix N42 — Low]      Import Sequelize (class) tidak digunakan → dihapus.
- * [Fix N46 — Low]      getServiceById() memutasi Sequelize instance in-place.
- *   → Gunakan toJSON() + spread sebelum sort.
- *
- * ============================================================
  * PANDUAN MAINTENANCE
  * ============================================================
  * buildFullInclude() — Helper untuk include relasi lengkap.
@@ -52,7 +17,7 @@
  *
  * ALLOWED_SORT_FIELDS — Whitelist kolom yang aman untuk sorting.
  *
- * MAX_PAGINATION_LIMIT — Batas maksimum item per halaman (mencegah data dump).
+ * MAX_PAGINATION_LIMIT — Batas maksimum item per halaman (mencegah data dump) = 20.
  */
 
 // ============================================================
@@ -78,7 +43,7 @@ const { Op } = require('sequelize');
 const ALLOWED_SORT_FIELDS = ['name', 'portfolio', 'sector'];
 
 /** Batas maksimum item per halaman (mencegah data dump) */
-const MAX_PAGINATION_LIMIT = 100;
+const MAX_PAGINATION_LIMIT = 20;
 
 // ============================================================
 // Helper Functions (Private)
@@ -165,8 +130,9 @@ function validateRevenue(value) {
  * GET /api/services
  *
  * Mendapatkan daftar layanan dengan dukungan filter, sorting, dan pagination.
- * Endpoint ini dioptimalkan untuk performa dengan memisahkan filterInclude
- * dan displayInclude untuk menghindari duplicate JOIN.
+ * Menggunakan two-step query untuk menghindari duplicate JOIN:
+ *   1. Hitung total + ambil ID layanan hasil filter (dengan pagination & sorting)
+ *   2. Ambil data lengkap berdasarkan ID yang sudah di-filter
  *
  * @query {string} [search] - Kata kunci pencarian (nama atau kode layanan)
  * @query {string} [portfolio] - Filter berdasarkan ID portfolio
@@ -174,14 +140,14 @@ function validateRevenue(value) {
  * @query {string} [sort=name] - Kolom sorting (name|portfolio|sector)
  * @query {string} [order=asc] - Arah sorting (asc|desc)
  * @query {number} [page=1] - Halaman
- * @query {number} [limit=10] - Item per halaman (maks 100)
+ * @query {number} [limit=10] - Item per halaman (maks 20)
  */
 exports.getAllServices = async (req, res) => {
   try {
     const {
       search,
-      portfolio,
-      sector,
+      portfolio_id,
+      sector_id,
       sort = 'name',
       order = 'asc',
     } = req.query;
@@ -194,13 +160,10 @@ exports.getAllServices = async (req, res) => {
       });
     }
 
-    // Normalisasi arah sorting (Sequelize membutuhkan 'ASC'/'DESC')
-    const safeOrder = (order || 'asc').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-
-    // Pagination dengan batas maksimum
+    const safeOrder = order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     const { limit, page, offset } = parsePagination(req.query);
 
-    // WHERE clause untuk pencarian teks
+    // Where clause untuk pencarian teks
     const where = {};
     if (search) {
       where[Op.or] = [
@@ -209,85 +172,124 @@ exports.getAllServices = async (req, res) => {
       ];
     }
 
-    /**
-     * [Fix #9] filterInclude — HANYA untuk WHERE clause (tidak mengambil data).
-     * Digunakan di Service.count() untuk menghitung total.
-     */
-    const filterInclude = [];
-    if (portfolio) {
-      filterInclude.push({
+    // Include untuk filter (portfolio dan sektor) – hanya untuk keperluan WHERE
+    const filterIncludes = [];
+    if (portfolio_id) {
+      filterIncludes.push({
         model: Portfolio,
         as: 'portfolio',
-        where: { id: portfolio },
+        where: { id: portfolio_id },
+        required: true,
         attributes: [],
       });
     }
-    if (sector) {
-      filterInclude.push({
+    if (sector_id) {
+      filterIncludes.push({
         model: Sector,
         as: 'sectors',
-        where: { id: sector },
+        where: { id: sector_id },
+        required: true,
         attributes: [],
         through: { attributes: [] },
       });
     }
 
-    // Hitung total dengan filterInclude agar angka akurat
-    const total = await Service.count({
+    // Include khusus untuk sorting (hanya jika kolom sorting butuh join)
+    const orderIncludes = [];
+    if (sort === 'portfolio') {
+      // Hanya tambah jika belum ada di filter
+      if (!portfolio_id) {
+        orderIncludes.push({
+          model: Portfolio,
+          as: 'portfolio',
+          required: false,
+          attributes: [],
+        });
+      }
+    } else if (sort === 'sector') {
+      // Hanya tambah jika belum ada di filter
+      if (!sector_id) {
+        orderIncludes.push({
+          model: Sector,
+          as: 'sectors',
+          required: false,
+          attributes: [],
+          through: { attributes: [] },
+        });
+      }
+    }
+
+    // Gabungkan include tanpa duplikasi
+    const allIncludes = [...filterIncludes];
+    orderIncludes.forEach(oi => {
+      const exists = allIncludes.some(
+        inc => inc.model === oi.model && inc.as === oi.as
+      );
+      if (!exists) {
+        allIncludes.push(oi);
+      }
+    });
+    
+    // Step 1: Hitung total layanan setelah filter
+    const totalCount = await Service.count({
       where,
-      include: filterInclude,
+      include: filterIncludes,
       distinct: true,
     });
 
-    // Bangun order clause berdasarkan field yang dipilih
-    let orderClause;
-    if (sort === 'portfolio') {
-      orderClause = [[{ model: Portfolio, as: 'portfolio' }, 'name', safeOrder]];
-    } else if (sort === 'sector') {
-      orderClause = [[{ model: Sector, as: 'sectors' }, 'code', safeOrder]];
-    } else {
-      orderClause = [[sort, safeOrder]];
-    }
-
-    /**
-     * displayInclude — untuk SELECT data ke client (tanpa WHERE agar tidak bentrok).
-     */
-    const displayInclude = [
-      { model: Portfolio, as: 'portfolio', attributes: ['id', 'name'] },
-      { model: SubPortfolio, as: 'sub_portfolio', attributes: ['code'] },
-      {
-        model: Sector,
-        as: 'sectors',
-        attributes: ['id', 'code'],
-        through: { attributes: [] },
-      },
-    ];
-
-    const services = await Service.findAll({
+    // Step 2: Ambil hanya ID layanan yang sudah di-filter, dengan pagination & sorting
+    const idRows = await Service.findAll({
       where,
-      include: displayInclude,
-      attributes: ['id', 'name', 'code', 'portfolio_id'],
-      order: orderClause,
-      limit,
+      include: allIncludes,
+      attributes: ['id'],
+      group: ['Service.id'],
+      order: (() => {
+        if (sort === 'portfolio') {
+          return [[{ model: Portfolio, as: 'portfolio' }, 'name', safeOrder]];
+        } else if (sort === 'sector') {
+          return [[{ model: Sector, as: 'sectors' }, 'code', safeOrder]];
+        }
+        return [[sort, safeOrder]];
+      })(),
       offset,
-      subQuery: false, // diperlukan untuk ORDER BY relasi + LIMIT
+      limit,
+      subQuery: false,
     });
 
-    // Filter post-query untuk portfolio dan sector (lebih predictable)
-    let result = services;
-    if (portfolio) {
-      result = result.filter(
-        (s) => s.portfolio && String(s.portfolio.id || s.portfolio_id) === String(portfolio)
-      );
-    }
-    if (sector) {
-      result = result.filter(
-        (s) => s.sectors && s.sectors.some((sec) => String(sec.id) === String(sector))
-      );
+    const serviceIds = idRows.map(row => row.id);
+    if (serviceIds.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          total: totalCount,
+          halaman: page,
+          limit,
+          layanan: [],
+        },
+      });
     }
 
-    // Format response ringkas untuk frontend
-    const formatted = result.map((s) => ({
+    // Step 3: Ambil data lengkap tanpa sorting (hanya berdasarkan ID)
+    const services = await Service.findAll({
+      where: { id: serviceIds },
+      include: [
+        { model: Portfolio, as: 'portfolio', attributes: ['name'] },
+        { model: SubPortfolio, as: 'sub_portfolio', attributes: ['code'] },
+        {
+          model: Sector,
+          as: 'sectors',
+          attributes: ['code'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    // Step 4: Urutkan manual sesuai urutan serviceIds (mempertahankan urutan pagination)
+    const sortedServices = serviceIds
+      .map(id => services.find(s => s.id === id))
+      .filter(Boolean);
+
+    const formatted = sortedServices.map((s) => ({
       id: s.id,
       name: s.name,
       code: s.code,
@@ -299,7 +301,7 @@ exports.getAllServices = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        total,
+        total: totalCount,
         halaman: page,
         limit,
         layanan: formatted,
@@ -320,7 +322,7 @@ exports.getAllServices = async (req, res) => {
  * Mendapatkan detail lengkap satu layanan termasuk semua relasi.
  * Revenue diurutkan dari nilai tertinggi ke terendah.
  *
- * [Fix N46] Tidak memutasi instance Sequelize secara in-place.
+ * Tidak memutasi instance Sequelize secara in-place.
  */
 exports.getServiceById = async (req, res) => {
   try {
@@ -335,7 +337,7 @@ exports.getServiceById = async (req, res) => {
       });
     }
 
-    // [Fix N46] Konversi ke plain object, lalu sort copy revenue
+    // Konversi ke plain object lalu sort copy revenue (hindari mutasi)
     const serviceData = service.toJSON();
     if (Array.isArray(serviceData.revenues)) {
       serviceData.revenues = [...serviceData.revenues].sort(
@@ -359,9 +361,9 @@ exports.getServiceById = async (req, res) => {
  * Membuat layanan baru dengan relasi sektor dan sub sektor.
  * Semua operasi dibungkus dalam database transaction.
  *
- * [Fix #10] Validasi field wajib (name).
- * [Fix N34] Validasi keberadaan portfolio_id dan sub_portfolio_id di DB.
- * [Fix N38] Trim name sebelum duplicate check.
+ * Validasi field wajib (name).
+ * Validasi keberadaan portfolio_id dan sub_portfolio_id di DB.
+ * Trim name sebelum duplicate check.
  */
 exports.createService = async (req, res) => {
   const transaction = await Service.sequelize.transaction();
@@ -383,7 +385,7 @@ exports.createService = async (req, res) => {
       sub_sectors,
     } = req.body;
 
-    // ========== Validasi dasar ==========
+    // --- Validasi dasar ---
     if (!name || !name.trim()) {
       await transaction.rollback();
       return res.status(400).json({
@@ -394,7 +396,6 @@ exports.createService = async (req, res) => {
 
     const trimmedName = name.trim();
 
-    // Cek duplikasi nama
     const existingService = await Service.findOne({ where: { name: trimmedName } });
     if (existingService) {
       await transaction.rollback();
@@ -404,7 +405,7 @@ exports.createService = async (req, res) => {
       });
     }
 
-    // ========== Validasi foreign keys ==========
+    // --- Validasi foreign keys ---
     if (portfolio_id) {
       const portfolioExists = await Portfolio.findByPk(portfolio_id);
       if (!portfolioExists) {
@@ -425,7 +426,6 @@ exports.createService = async (req, res) => {
           pesan: 'Sub portfolio tidak ditemukan',
         });
       }
-      // Pastikan sub_portfolio milik portfolio yang benar
       if (portfolio_id && subPortfolioExists.portfolio_id !== portfolio_id) {
         await transaction.rollback();
         return res.status(400).json({
@@ -446,7 +446,7 @@ exports.createService = async (req, res) => {
       }
     }
 
-    // ========== Validasi sektor & sub sektor ==========
+    // --- Validasi sektor & sub sektor (opsional) ---
     if (Array.isArray(sectors) && sectors.length > 0) {
       const uniqueSectorIds = [...new Set(sectors)];
       const foundSectors = await Sector.findAll({
@@ -481,7 +481,7 @@ exports.createService = async (req, res) => {
       }
     }
 
-    // ========== Create service ==========
+    // --- Create service dalam transaksi ---
     const service = await Service.create(
       {
         name: trimmedName,
@@ -500,7 +500,7 @@ exports.createService = async (req, res) => {
       { transaction }
     );
 
-    // ========== Tambah relasi many-to-many ==========
+    // --- Tambahkan relasi many-to-many ---
     if (Array.isArray(sectors) && sectors.length > 0) {
       await service.addSectors(sectors, { transaction });
     }
@@ -510,7 +510,6 @@ exports.createService = async (req, res) => {
 
     await transaction.commit();
 
-    // Ambil data lengkap untuk response (tanpa transaksi)
     const createdService = await Service.findByPk(service.id, {
       include: buildFullInclude(),
     });
@@ -543,9 +542,9 @@ exports.createService = async (req, res) => {
  *
  * Memperbarui data layanan secara parsial (hanya field yang dikirim yang diubah).
  *
- * [Fix N27 — Critical] Partial update aman: periksa `!== undefined` untuk setiap field.
- * [Fix N31 — Medium]   Mendukung penghapusan semua relasi dengan mengirim sectors=[].
- * [Fix N38]            Trim name sebelum validasi duplikasi.
+ * Partial update aman: periksa `!== undefined` untuk setiap field.
+ * Mendukung penghapusan semua relasi dengan mengirim sectors=[].
+ * Trim name sebelum validasi duplikasi.
  */
 exports.updateService = async (req, res) => {
   try {
@@ -592,10 +591,7 @@ exports.updateService = async (req, res) => {
       }
     }
 
-    /**
-     * [Fix N27] Safe partial update: hanya field yang dikirim yang diubah.
-     * Jika tidak dikirim (undefined), gunakan nilai existing.
-     */
+    // Safe partial update: hanya field yang dikirim yang diubah
     await service.update({
       name: name !== undefined ? name.trim() : service.name,
       group: group !== undefined ? group : service.group,
@@ -608,9 +604,7 @@ exports.updateService = async (req, res) => {
       sbu_owner_id: sbu_owner_id !== undefined ? sbu_owner_id : service.sbu_owner_id,
     });
 
-    /**
-     * [Fix N31] Update relasi dengan `!== undefined` agar array kosong [] tetap diproses.
-     */
+    // Update relasi many-to-many (mendukung array kosong untuk hapus semua)
     if (sectors !== undefined) {
       await service.setSectors(sectors);
     }
@@ -641,8 +635,7 @@ exports.updateService = async (req, res) => {
  * DELETE /api/services/:id
  *
  * Menghapus layanan secara permanen (hard delete).
- * Relasi di tabel pivot (service_sectors, service_sub_sectors, marketing_kit_services)
- * akan ikut terhapus karena CASCADE DELETE di migrasi.
+ * Relasi di tabel pivot akan ikut terhapus karena CASCADE DELETE di migrasi.
  */
 exports.deleteService = async (req, res) => {
   try {
@@ -676,14 +669,13 @@ exports.deleteService = async (req, res) => {
  * Menambahkan data revenue (pendapatan) untuk suatu layanan.
  * Digunakan oleh manajemen untuk mencatat nilai kontrak dengan pelanggan.
  *
- * [Fix #12] Memvalidasi revenue sebagai angka positif.
+ * Memvalidasi revenue sebagai angka positif.
  */
 exports.addServiceRevenue = async (req, res) => {
   try {
     const { id: service_id } = req.params;
     const { customer_name, revenue, unit_id } = req.body;
 
-    // Validasi field wajib
     if (!customer_name || revenue === undefined || revenue === null || !unit_id) {
       return res.status(400).json({
         success: false,
@@ -691,7 +683,6 @@ exports.addServiceRevenue = async (req, res) => {
       });
     }
 
-    // [Fix #12] Validasi revenue sebagai angka positif
     const revenueValidation = validateRevenue(revenue);
     if (!revenueValidation.valid) {
       return res.status(400).json({
@@ -700,7 +691,6 @@ exports.addServiceRevenue = async (req, res) => {
       });
     }
 
-    // Pastikan service dan unit ada di DB
     const [service, unit] = await Promise.all([
       Service.findByPk(service_id),
       Unit.findByPk(unit_id),

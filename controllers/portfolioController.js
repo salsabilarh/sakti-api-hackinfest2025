@@ -6,23 +6,6 @@
  * Sub Portfolio adalah sub-kategori di bawah Portfolio.
  *
  * ============================================================
- * DAFTAR PERBAIKAN DALAM FILE INI
- * ============================================================
- * [Fix #13 — Low]     Pola `value || existing` pada update functions.
- *   String kosong "" dievaluasi falsy → update diabaikan diam-diam.
- *   → Ganti dengan `!== undefined` check + validasi eksplisit jika empty.
- *
- * [Fix N35 — Medium]  Tidak ada max pagination limit (tapi data master kecil,
- *   GET all mengembalikan semua data tanpa pagination secara default.
- *   Tetap aman karena jumlah portfolio terbatas.
- *
- * [Fix N38 — Low]     name dan code tidak di-trim sebelum digunakan.
- *   → Tambahkan .trim() pada semua input string sebelum validasi.
- *
- * [Fix N50 — Low]     Response message dalam Bahasa Inggris.
- *   → Semua response message diubah ke Bahasa Indonesia.
- *
- * ============================================================
  * DESAIN KEPUTUSAN: PAGINATION MASTER DATA
  * ============================================================
  * Portfolio dan Sub Portfolio adalah data master yang jumlahnya relatif kecil
@@ -149,8 +132,8 @@ exports.getPortfolioById = async (req, res) => {
  *
  * Membuat portfolio baru.
  *
- * [Fix N38] Nama di-trim sebelum validasi dan create.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Nama di-trim sebelum validasi dan create.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.createPortfolio = async (req, res) => {
   try {
@@ -194,9 +177,9 @@ exports.createPortfolio = async (req, res) => {
  *
  * Memperbarui nama portfolio.
  *
- * [Fix #13] Menggunakan `name !== undefined` bukan `name || portfolio.name`.
- * [Fix N38] Nama di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Menggunakan `name !== undefined` bukan `name || portfolio.name`.
+ * Nama di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  *
  * Penjelasan perbaikan:
  * Sebelumnya: `name: name || portfolio.name` → jika name = "" (string kosong)
@@ -308,7 +291,7 @@ exports.deletePortfolio = async (req, res) => {
  * Query params:
  *   portfolio_id (optional) - Filter sub portfolio berdasarkan portfolio induk
  *
- * [Fix N35] Data dikembalikan semua (tanpa pagination) karena jumlahnya terbatas.
+ * Data dikembalikan semua (tanpa pagination) karena jumlahnya terbatas.
  */
 exports.getAllSubPortfolios = async (req, res) => {
   try {
@@ -382,8 +365,8 @@ exports.getSubPortfolioById = async (req, res) => {
  *
  * Membuat sub portfolio baru di bawah portfolio tertentu (dari parameter URL).
  *
- * [Fix N38] name dan code di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * name dan code di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.createSubPortfolio = async (req, res) => {
   try {
@@ -461,9 +444,9 @@ exports.createSubPortfolio = async (req, res) => {
  * Memperbarui nama dan/atau kode sub portfolio.
  * Sub portfolio harus milik portfolio yang sesuai di URL (keamanan data).
  *
- * [Fix #13] Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
- * [Fix N38] name dan code di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
+ * name dan code di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.updateSubPortfolio = async (req, res) => {
   try {

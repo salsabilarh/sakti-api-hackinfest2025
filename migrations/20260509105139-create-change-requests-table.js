@@ -1,42 +1,43 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('unit_change_requests', {
+  async up(queryInterface, Sequelize) {
+    await queryInterface.createTable('change_requests', {
       id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.CHAR(36),
         primaryKey: true,
-        autoIncrement: true
       },
       user_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: false,
         references: {
-          model: 'users', 
+          model: 'users',
           key: 'id'
         },
         onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        collate: 'utf8mb4_bin'
       },
       current_unit_id: {
-        type: Sequelize.UUID,
-        allowNull: false,
+        type: Sequelize.CHAR(36),
+        allowNull: true,
         references: {
           model: 'units',
           key: 'id'
         },
+        onDelete: 'SET NULL',
         onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        collate: 'utf8mb4_bin'
       },
       requested_unit_id: {
-        type: Sequelize.UUID,
-        allowNull: false,
+        type: Sequelize.CHAR(36),
+        allowNull: true,
         references: {
           model: 'units',
           key: 'id'
         },
+        onDelete: 'SET NULL',
         onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        collate: 'utf8mb4_bin'
       },
       status: {
         type: Sequelize.ENUM('pending', 'approved', 'rejected'),
@@ -46,20 +47,26 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
+      requested_role: {
+        type: Sequelize.ENUM('admin', 'management', 'viewer'),
+        allowNull: true,
+        comment: 'Role yang diminta (opsional, NULL = tidak berubah)'
+      },
       created_at: {
         type: Sequelize.DATE,
-        allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
       updated_at: {
         type: Sequelize.DATE,
-        allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
       }
     });
+
+    await queryInterface.addIndex('change_requests', ['status']);
+    await queryInterface.addIndex('change_requests', ['user_id']);
   },
 
-  down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('unit_change_requests');
+  async down(queryInterface, Sequelize) {
+    await queryInterface.dropTable('change_requests');
   }
 };

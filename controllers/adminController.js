@@ -24,7 +24,7 @@ const {
   MarketingKit,
   DownloadLog,
   Unit,
-  UnitChangeRequest,
+  ChangeRequest,
   RefreshToken,
   sequelize,
 } = require('../models');
@@ -51,8 +51,8 @@ const ALLOWED_USER_SORT_FIELDS = [
   'last_login',
 ];
 
-/** Status yang valid untuk permintaan perubahan unit */
-const VALID_UNIT_CHANGE_STATUSES = ['pending', 'approved', 'rejected'];
+/** Status yang valid untuk permintaan perubahan unit / role */
+const VALID_CHANGE_STATUSES = ['pending', 'approved', 'rejected'];
 
 /** Regex validasi email sederhana (sesuai RFC 5322) */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,10 +63,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Mendapatkan dan memvalidasi kunci enkripsi untuk temporary password.
- * Kunci diambil dari environment variable `TEMP_PASSWORD_SECRET_KEY`.
- * Validasi dilakukan secara lazy (saat fungsi dipanggil), bukan saat module load,
- * sehingga aplikasi tetap berjalan meskipun variabel environment tidak tersedia,
- * tetapi endpoint yang memerlukan enkripsi akan gagal dengan pesan jelas.
+ * Validasi dilakukan secara lazy (saat fungsi dipanggil), bukan saat module load.
  *
  * @throws {Error} Jika kunci tidak ada atau panjangnya ≠ 32 karakter.
  * @returns {string} Kunci rahasia 32 karakter.
@@ -88,7 +85,6 @@ function getSecretKey() {
  *
  * @param {string} plainText - Teks yang akan dienkripsi.
  * @returns {string} String terenkripsi dalam format iv:encrypted.
- * @throws {Error} Jika kunci enkripsi tidak valid.
  */
 function encrypt(plainText) {
   const secretKey = getSecretKey();
@@ -124,7 +120,6 @@ function decrypt(encryptedText) {
 
 /**
  * Parsing dan validasi parameter pagination dari query string.
- * Menerapkan batas maksimum (`MAX_PAGINATION_LIMIT`) dan nilai minimal 1.
  *
  * @param {Object} query - `req.query` dari Express.
  * @returns {{ limit: number, page: number, offset: number }}
@@ -140,7 +135,7 @@ function parsePagination(query) {
  * Validasi format email sederhana.
  *
  * @param {string} email - Alamat email yang akan divalidasi.
- * @returns {boolean} `true` jika format email valid, `false` sebaliknya.
+ * @returns {boolean}
  */
 function isValidEmail(email) {
   return EMAIL_REGEX.test(email);
@@ -154,14 +149,7 @@ function isValidEmail(email) {
  * GET /api/admin/dashboard
  *
  * Menampilkan statistik ringkasan untuk halaman dashboard admin.
- * - Total pengguna terverifikasi
- * - Jumlah pengguna menunggu verifikasi
- * - Pengguna aktif dalam 30 hari terakhir
- * - Total download marketing kit
- * - Permintaan pindah unit yang pending
- * - Permintaan reset password yang belum diproses
- *
- * Semua query dijalankan secara paralel dengan `Promise.all` untuk performa optimal.
+ * Semua query dijalankan secara paralel dengan `Promise.all`.
  */
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -169,14 +157,14 @@ exports.getDashboardStats = async (req, res) => {
     const [
       totalUsers,
       totalWaitingUsers,
-      totalPendingUnitChangeRequests,
+      totalPendingChangeRequests,
       totalActiveUsers,
       totalDownloads,
       totalPasswordResetRequests,
     ] = await Promise.all([
       User.count({ where: { is_verified: true } }),
       User.count({ where: { is_verified: null } }),
-      UnitChangeRequest.count({ where: { status: 'pending' } }),
+      ChangeRequest.count({ where: { status: 'pending' } }),
       User.count({ where: { last_login: { [Op.gte]: thirtyDaysAgo } } }),
       DownloadLog.count(),
       PasswordResetRequest.count({ where: { is_processed: false } }),
@@ -189,7 +177,7 @@ exports.getDashboardStats = async (req, res) => {
         menunggu_verifikasi: totalWaitingUsers,
         pengguna_aktif_30_hari: totalActiveUsers,
         total_download: totalDownloads,
-        permintaan_pindah_unit: totalPendingUnitChangeRequests,
+        permintaan_pindah: totalPendingChangeRequests,
         permintaan_reset_password: totalPasswordResetRequests,
       },
     });
@@ -206,20 +194,12 @@ exports.getDashboardStats = async (req, res) => {
  * GET /api/admin/users
  *
  * Mengambil daftar semua pengguna dengan dukungan:
- * - Pencarian (nama, email)
- * - Filter berdasarkan role, unit, status aktif, status verifikasi
- * - Sorting (whitelist kolom aman)
+ * - Pencarian (nama/email)
+ * - Filter role, unit, status aktif, status verifikasi
+ * - Sorting (whitelist aman)
  * - Pagination dengan batas maksimum
  *
- * @query {string} [search] - Kata kunci pencarian (nama/email)
- * @query {string} [role] - Filter role (admin/management/viewer)
- * @query {string} [unit] - Filter berdasarkan unit_kerja_id
- * @query {string} [status] - Filter is_active ('active'/'inactive')
- * @query {string} [verified] - Filter is_verified ('true'/'false')
- * @query {string} [sort=full_name] - Kolom sorting (whitelist)
- * @query {string} [direction=ASC] - Arah sorting (ASC/DESC)
- * @query {number} [page=1] - Halaman
- * @query {number} [limit=10] - Item per halaman (maks 100)
+ * Parameter `status` (deprecated) digantikan dengan `is_active` untuk kejelasan.
  */
 exports.getAllUsers = async (req, res) => {
   try {
@@ -229,11 +209,12 @@ exports.getAllUsers = async (req, res) => {
       unit,
       status,
       verified,
+      is_active: isActiveParam,
       sort = 'full_name',
       direction = 'ASC',
     } = req.query;
 
-    // Validasi kolom sorting (mencegah SQL injection)
+    // Validasi kolom sorting
     if (!ALLOWED_USER_SORT_FIELDS.includes(sort)) {
       return res.status(400).json({
         success: false,
@@ -252,24 +233,35 @@ exports.getAllUsers = async (req, res) => {
       ];
     }
     if (role) where.role = role;
-    if (status) where.is_active = status.toLowerCase() === 'active';
     if (unit) where.unit_kerja_id = unit;
+
+    // Filter status aktif: prioritas is_active > status
+    let activeFilter = null;
+    if (isActiveParam !== undefined) {
+      activeFilter = isActiveParam === 'true' || isActiveParam === true;
+    } else if (status) {
+      if (status.toLowerCase() === 'active') activeFilter = true;
+      else if (status.toLowerCase() === 'inactive') activeFilter = false;
+      else {
+        return res.status(400).json({
+          success: false,
+          pesan: `Parameter status tidak valid. Gunakan 'active' atau 'inactive'.`,
+        });
+      }
+    }
+    if (activeFilter !== null) where.is_active = activeFilter;
+
+    // Filter verifikasi: default tampilkan yang sudah diproses (tidak null)
     if (verified !== undefined) {
       where.is_verified = verified === 'true';
     } else {
-      where.is_verified = { [Op.ne]: null }; // default: tampilkan yang sudah diproses
+      where.is_verified = { [Op.ne]: null };
     }
 
     const total = await User.count({ where });
     const users = await User.findAll({
       where,
-      include: [
-        {
-          model: Unit,
-          as: 'unit',
-          attributes: ['id', 'name', 'type'],
-        },
-      ],
+      include: [{ model: Unit, as: 'unit', attributes: ['id', 'name', 'type'] }],
       attributes: [
         'id',
         'full_name',
@@ -279,7 +271,6 @@ exports.getAllUsers = async (req, res) => {
         'is_verified',
         'last_login',
         'created_at',
-        // Menambahkan field komputasi: apakah user masih memiliki temporary password
         [
           sequelize.literal('CASE WHEN temporary_password IS NOT NULL THEN true ELSE false END'),
           'has_temp_password',
@@ -314,8 +305,8 @@ exports.getAllUsers = async (req, res) => {
 /**
  * GET /api/admin/waiting-users
  *
- * Mengambil daftar pengguna yang menunggu verifikasi (is_verified = null).
- * Diurutkan dari yang paling lama mendaftar (FIFO) agar proses verifikasi berjalan adil.
+ * Daftar pengguna yang menunggu verifikasi (is_verified = null).
+ * Diurutkan FIFO (created_at ASC).
  */
 exports.getWaitingUsers = async (req, res) => {
   try {
@@ -354,9 +345,8 @@ exports.getWaitingUsers = async (req, res) => {
 /**
  * POST /api/admin/waiting-users/:id/approve
  *
- * Menyetujui pendaftaran pengguna.
- * Hanya dapat dilakukan jika status verifikasi masih `null` (pending).
- * Mencegah approval ulang atau approval terhadap pengguna yang sudah ditolak.
+ * Menyetujui pendaftaran pengguna (set is_verified = true).
+ * Hanya jika status masih null.
  */
 exports.approveUser = async (req, res) => {
   try {
@@ -365,7 +355,6 @@ exports.approveUser = async (req, res) => {
       return res.status(404).json({ success: false, pesan: 'Pengguna tidak ditemukan' });
     }
 
-    // Validasi state transition
     if (user.is_verified === true) {
       return res.status(400).json({
         success: false,
@@ -396,9 +385,9 @@ exports.approveUser = async (req, res) => {
 /**
  * POST /api/admin/waiting-users/:id/reject
  *
- * Menolak pendaftaran pengguna.
- * Hanya dapat dilakukan jika status verifikasi masih `null`.
- * Setelah ditolak, user tidak dapat login dan harus direset oleh admin jika ingin diaktifkan kembali.
+ * Menolak pendaftaran pengguna dan menghapus akun dari database.
+ * Hanya jika status masih null. Dilakukan pengecekan ketergantungan data.
+ * Jika user memiliki marketing kit atau layanan, penolakan dibatalkan.
  */
 exports.rejectUser = async (req, res) => {
   try {
@@ -415,16 +404,48 @@ exports.rejectUser = async (req, res) => {
       });
     }
 
-    await user.update({ is_verified: false });
+    if (user.role === 'admin') {
+      return res.status(400).json({
+        success: false,
+        pesan: 'Tidak dapat menolak pendaftaran admin. Nonaktifkan akun admin melalui fitur edit user jika diperlukan.',
+      });
+    }
+
+    const [relatedKits, relatedServices] = await Promise.all([
+      MarketingKit.count({ where: { uploaded_by: user.id } }),
+      Service.count({ where: { created_by: user.id } }),
+    ]);
+
+    if (relatedKits > 0) {
+      return res.status(409).json({
+        success: false,
+        pesan: `Tidak dapat menolak pendaftaran karena user telah mengupload ${relatedKits} marketing kit. Hapus kit tersebut terlebih dahulu.`,
+      });
+    }
+    if (relatedServices > 0) {
+      return res.status(409).json({
+        success: false,
+        pesan: `Tidak dapat menolak pendaftaran karena user telah membuat ${relatedServices} layanan. Hapus layanan tersebut terlebih dahulu.`,
+      });
+    }
+
+    await user.destroy();
+
     return res.json({
       success: true,
-      pesan: `Pendaftaran ${user.full_name} berhasil ditolak.`,
+      pesan: `Pendaftaran ${user.full_name} ditolak dan akun telah dihapus dari sistem.`,
     });
   } catch (error) {
     console.error('[rejectUser] Error:', error);
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(409).json({
+        success: false,
+        pesan: 'Tidak dapat menghapus akun karena masih memiliki data terkait (misalnya log download atau permintaan reset password). Hapus data tersebut secara manual terlebih dahulu.',
+      });
+    }
     return res.status(500).json({
       success: false,
-      pesan: 'Gagal menolak pendaftaran pengguna',
+      pesan: 'Gagal menolak pendaftaran pengguna.',
     });
   }
 };
@@ -432,14 +453,13 @@ exports.rejectUser = async (req, res) => {
 /**
  * GET /api/admin/password-reset-requests
  *
- * Mengambil daftar permintaan reset password yang belum diproses.
- * Hanya satu permintaan terawal per pengguna yang ditampilkan (FIFO).
+ * Daftar permintaan reset password yang belum diproses.
+ * Hanya satu permintaan terawal per user (FIFO).
  */
 exports.getPasswordResetRequests = async (req, res) => {
   try {
     const { limit, page, offset } = parsePagination(req.query);
 
-    // Ambil ID permintaan terawal per user (MIN id)
     const earliestIds = await PasswordResetRequest.findAll({
       where: { is_processed: false },
       attributes: [[sequelize.fn('MIN', sequelize.col('id')), 'min_id']],
@@ -496,16 +516,10 @@ exports.getPasswordResetRequests = async (req, res) => {
 /**
  * POST /api/admin/password-reset-requests/:id/reset
  *
- * Mereset password pengguna ke password acak yang kuat (96-bit entropy).
- * Password sementara dienkripsi dan disimpan di kolom `temporary_password`
- * agar admin dapat mengambilnya kembali jika diperlukan.
- *
- * Setelah reset:
- * - Semua refresh token user direvoke (paksa logout dari semua perangkat)
- * - Semua permintaan reset pending untuk user tersebut ditandai terproses
- * - Password sementara dikembalikan SEKALI dalam response (via saluran aman)
- *
- * @body {string} [admin_notes] - Catatan opsional (belum diimplementasikan di body, tapi disediakan untuk perluasan)
+ * Mereset password pengguna ke password acak (96-bit entropy).
+ * Password sementara dienkripsi dan disimpan di temporary_password.
+ * Semua refresh token direvoke (logout dari semua perangkat).
+ * Semua permintaan reset pending untuk user ditandai terproses.
  */
 exports.resetUserPassword = async (req, res) => {
   try {
@@ -521,7 +535,6 @@ exports.resetUserPassword = async (req, res) => {
       });
     }
 
-    // Generate password acak yang kuat (base64url, 96 bit)
     const temporaryPassword = crypto.randomBytes(12).toString('base64url');
     const hashedPassword = await argon2.hash(temporaryPassword);
 
@@ -535,7 +548,6 @@ exports.resetUserPassword = async (req, res) => {
       );
     }
 
-    // Update user
     await request.user.update({
       password: hashedPassword,
       temporary_password: encryptedTempPassword,
@@ -543,13 +555,11 @@ exports.resetUserPassword = async (req, res) => {
       reset_token_expires: null,
     });
 
-    // Revoke semua refresh token (paksa logout)
     await RefreshToken.update(
       { is_revoked: true },
       { where: { user_id: request.user.id, is_revoked: false } }
     );
 
-    // Tandai semua permintaan reset user ini sebagai terproses
     await PasswordResetRequest.update(
       {
         is_processed: true,
@@ -566,7 +576,7 @@ exports.resetUserPassword = async (req, res) => {
         user_id: request.user.id,
         email: request.user.email,
         full_name: request.user.full_name,
-        temp_password: temporaryPassword, // Hanya muncul sekali di response ini
+        temp_password: temporaryPassword,
       },
     });
   } catch (error) {
@@ -581,11 +591,8 @@ exports.resetUserPassword = async (req, res) => {
 /**
  * GET /api/admin/users/:id/temporary-password
  *
- * Mengambil password sementara pengguna yang masih aktif (belum diganti).
- * Password didekripsi menggunakan AES-256-CBC.
- *
- * Penting: Endpoint ini menggunakan `User.unscoped()` untuk mengabaikan defaultScope
- * yang secara default mengecualikan kolom `temporary_password`.
+ * Mengambil dan mendekripsi password sementara pengguna yang masih aktif (belum diganti).
+ * Menggunakan `User.unscoped()` untuk mengabaikan defaultScope.
  */
 exports.getTemporaryPassword = async (req, res) => {
   try {
@@ -640,30 +647,30 @@ exports.getTemporaryPassword = async (req, res) => {
 };
 
 /**
- * GET /api/admin/unit-change-requests
+ * GET /api/admin/change-requests
  *
- * Mengambil daftar permintaan perubahan unit kerja.
- * Mendukung filter berdasarkan status (pending/approved/rejected) dan pagination.
+ * Daftar permintaan perubahan.
+ * Mendukung filter status dan pagination.
  */
-exports.getUnitChangeRequests = async (req, res) => {
+exports.getChangeRequests = async (req, res) => {
   try {
     const { limit, page, offset } = parsePagination(req.query);
     const where = {};
 
     if (req.query.status) {
-      if (!VALID_UNIT_CHANGE_STATUSES.includes(req.query.status)) {
+      if (!VALID_CHANGE_STATUSES.includes(req.query.status)) {
         return res.status(400).json({
           success: false,
-          pesan: `Status tidak valid. Pilihan: ${VALID_UNIT_CHANGE_STATUSES.join(', ')}`,
+          pesan: `Status tidak valid. Pilihan: ${VALID_CHANGE_STATUSES.join(', ')}`,
         });
       }
       where.status = req.query.status;
     }
 
-    const { count, rows } = await UnitChangeRequest.findAndCountAll({
+    const { count, rows } = await ChangeRequest.findAndCountAll({
       where,
       include: [
-        { model: User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+        { model: User, as: 'user', attributes: ['id', 'full_name', 'email', 'role'] },
         { model: Unit, as: 'currentUnit', attributes: ['id', 'name', 'type'] },
         { model: Unit, as: 'requestedUnit', attributes: ['id', 'name', 'type'] },
       ],
@@ -678,16 +685,14 @@ exports.getUnitChangeRequests = async (req, res) => {
         id: r.user.id,
         full_name: r.user.full_name,
         email: r.user.email,
+        role: r.user.role,
       },
-      unit_saat_ini: r.currentUnit
-        ? { id: r.currentUnit.id, name: r.currentUnit.name }
-        : null,
-      unit_tujuan: r.requestedUnit
-        ? { id: r.requestedUnit.id, name: r.requestedUnit.name }
-        : null,
+      current_unit: r.currentUnit ? { id: r.currentUnit.id, name: r.currentUnit.name } : null,
+      requested_unit: r.requestedUnit ? { id: r.requestedUnit.id, name: r.requestedUnit.name } : null,
+      requested_role: r.requested_role,
       status: r.status,
-      catatan_admin: r.admin_notes,
-      diajukan_pada: r.created_at,
+      admin_notes: r.admin_notes,
+      created_at: r.created_at,
     }));
 
     return res.json({
@@ -703,28 +708,21 @@ exports.getUnitChangeRequests = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[getUnitChangeRequests] Error:', error);
+    console.error('[getChangeRequests] Error:', error);
     return res.status(500).json({
       success: false,
-      pesan: 'Gagal mengambil daftar permintaan perubahan unit',
+      pesan: 'Gagal mengambil daftar permintaan perubahan',
     });
   }
 };
 
 /**
- * PUT /api/admin/unit-change-requests/:request_id/process
+ * PUT /api/admin/change-requests/:request_id/process
  *
- * Memproses permintaan perubahan unit (approve/reject).
- * Operasi ini bersifat atomik menggunakan database transaction.
- *
- * - Jika `approve`: unit_kerja_id user diubah, status request menjadi 'approved'
- * - Jika `reject`: hanya status request yang berubah menjadi 'rejected'
- *
- * @param {string} request_id - ID permintaan (param)
- * @body {string} action - 'approve' atau 'reject'
- * @body {string} [admin_notes] - Catatan opsional dari admin
+ * Memproses permintaan perubahan (role dan/atau unit) dalam satu endpoint.
+ * Operasi atomik menggunakan transaction.
  */
-exports.processUnitChangeRequest = async (req, res) => {
+exports.processChangeRequest = async (req, res) => {
   let transaction;
   try {
     const { request_id } = req.params;
@@ -737,7 +735,7 @@ exports.processUnitChangeRequest = async (req, res) => {
       });
     }
 
-    const request = await UnitChangeRequest.findByPk(request_id, {
+    const request = await ChangeRequest.findByPk(request_id, {
       include: [{ model: User, as: 'user', attributes: ['id', 'full_name'] }],
     });
 
@@ -755,12 +753,10 @@ exports.processUnitChangeRequest = async (req, res) => {
     transaction = await sequelize.transaction();
 
     if (action === 'approve') {
-      // 1. Update unit user
       await User.update(
         { unit_kerja_id: request.requested_unit_id },
         { where: { id: request.user.id }, transaction }
       );
-      // 2. Update status request
       await request.update(
         { status: 'approved', admin_notes: admin_notes || null },
         { transaction }
@@ -777,7 +773,6 @@ exports.processUnitChangeRequest = async (req, res) => {
         },
       });
     } else {
-      // action === 'reject'
       await request.update(
         { status: 'rejected', admin_notes: admin_notes || null },
         { transaction }
@@ -791,14 +786,8 @@ exports.processUnitChangeRequest = async (req, res) => {
       });
     }
   } catch (error) {
-    if (transaction) {
-      try {
-        await transaction.rollback();
-      } catch (rbErr) {
-        console.error('[processUnitChangeRequest] Rollback error:', rbErr.message);
-      }
-    }
-    console.error('[processUnitChangeRequest] Error:', error);
+    if (transaction) await transaction.rollback();
+    console.error('[processChangeRequest] Error:', error);
     return res.status(500).json({
       success: false,
       pesan: 'Gagal memproses permintaan perubahan unit',
@@ -807,10 +796,84 @@ exports.processUnitChangeRequest = async (req, res) => {
 };
 
 /**
+ * PUT /api/admin/change-requests/:request_id/process
+ *
+ * Memproses permintaan perubahan (role dan/atau unit) dalam satu endpoint.
+ * Operasi atomik menggunakan transaction.
+ */
+exports.processChangeRequest = async (req, res) => {
+  let transaction;
+  try {
+    const { request_id } = req.params;
+    const { action, admin_notes } = req.body;
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, pesan: 'Tindakan tidak valid' });
+    }
+
+    const request = await ChangeRequest.findByPk(request_id, {
+      include: [{ model: User, as: 'user' }],
+    });
+    if (!request) {
+      return res.status(404).json({ success: false, pesan: 'Permintaan tidak ditemukan' });
+    }
+    if (request.status !== 'pending') {
+      const statusText = request.status === 'approved' ? 'disetujui' : 'ditolak';
+      return res.status(400).json({
+        success: false,
+        pesan: `Permintaan ini sudah ${statusText} sebelumnya`,
+      });
+    }
+
+    transaction = await sequelize.transaction();
+
+    if (action === 'approve') {
+      const updateData = {};
+
+      if (request.requested_unit_id && request.requested_unit_id !== request.user.unit_kerja_id) {
+        const unit = await Unit.findByPk(request.requested_unit_id, { transaction });
+        if (!unit) throw new Error('Unit tujuan tidak valid');
+        updateData.unit_kerja_id = request.requested_unit_id;
+      }
+
+      if (request.requested_role && request.requested_role !== request.user.role) {
+        if (request.requested_role === 'admin') {
+          updateData.unit_kerja_id = null;
+        }
+        updateData.role = request.requested_role;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await request.user.update(updateData, { transaction });
+      }
+
+      await request.update({ status: 'approved', admin_notes: admin_notes || null }, { transaction });
+      await transaction.commit();
+
+      return res.json({
+        success: true,
+        pesan: `Permintaan ${request.user.full_name} berhasil disetujui`,
+        data: { request_id, user_id: request.user.id, changes: updateData },
+      });
+    } else {
+      await request.update({ status: 'rejected', admin_notes: admin_notes || null }, { transaction });
+      await transaction.commit();
+      return res.json({
+        success: true,
+        pesan: `Permintaan ${request.user.full_name} berhasil ditolak`,
+      });
+    }
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('[processChangeRequest] Error:', error);
+    return res.status(500).json({ success: false, pesan: 'Gagal memproses permintaan' });
+  }
+};
+
+/**
  * GET /api/admin/download-logs
  *
- * Mengambil log download marketing kit dengan dukungan pencarian.
- * Pencarian dapat dilakukan berdasarkan nama kit, nama user, atau tujuan download.
+ * Log download marketing kit dengan dukungan pencarian.
  */
 exports.getDownloadLogs = async (req, res) => {
   try {
@@ -830,7 +893,6 @@ exports.getDownloadLogs = async (req, res) => {
       ];
     }
 
-    // Hitung total dengan subQuery: false agar COUNT akurat saat filtering melalui relasi
     const total = await DownloadLog.count({
       where,
       include: [
@@ -875,18 +937,12 @@ exports.getDownloadLogs = async (req, res) => {
  * POST /api/admin/users
  *
  * Admin membuat akun pengguna baru.
- * Password di-generate secara acak (96-bit entropy) dan langsung diverifikasi.
- *
- * @body {string} full_name - Nama lengkap
- * @body {string} email - Alamat email (unik)
- * @body {string} role - 'admin', 'management', atau 'viewer'
- * @body {string} [unit_kerja_id] - ID unit (wajib jika role bukan admin)
+ * Password di-generate acak, user langsung diverifikasi.
  */
 exports.createUser = async (req, res) => {
   try {
     let { full_name, email, role, unit_kerja_id } = req.body;
 
-    // Validasi input
     if (!full_name || !full_name.trim()) {
       return res.status(400).json({ success: false, pesan: 'Nama lengkap wajib diisi' });
     }
@@ -915,7 +971,6 @@ exports.createUser = async (req, res) => {
       return res.status(409).json({ success: false, pesan: 'Email sudah terdaftar' });
     }
 
-    // Generate password acak
     const temporaryPassword = crypto.randomBytes(12).toString('base64url');
     const hashedPassword = await argon2.hash(temporaryPassword);
 
@@ -933,7 +988,7 @@ exports.createUser = async (req, res) => {
       role,
       unit_kerja_id: role === 'admin' ? null : unit_kerja_id,
       is_active: true,
-      is_verified: true, // User yang dibuat admin langsung terverifikasi
+      is_verified: true,
       temporary_password: encryptedTempPassword,
     });
 
@@ -946,7 +1001,7 @@ exports.createUser = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         unit_kerja_id: newUser.unit_kerja_id,
-        temp_password: temporaryPassword, // Hanya sekali di response ini
+        temp_password: temporaryPassword,
       },
     });
   } catch (err) {
@@ -958,7 +1013,7 @@ exports.createUser = async (req, res) => {
 /**
  * PUT /api/admin/users/:id
  *
- * Admin memperbarui data pengguna (email, nama, role, unit, status aktif, status verifikasi).
+ * Admin memperbarui data pengguna.
  */
 exports.updateUser = async (req, res) => {
   try {
@@ -980,7 +1035,6 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    // Jika role diubah menjadi admin, unit kerja harus null
     if (role === 'admin') unit_kerja_id = null;
 
     await user.update({
@@ -992,7 +1046,6 @@ exports.updateUser = async (req, res) => {
       is_verified: is_verified !== undefined ? is_verified : user.is_verified,
     });
 
-    // Jika akun dinonaktifkan, revoke semua refresh token
     if (is_active === false) {
       await RefreshToken.update(
         { is_revoked: true },
@@ -1026,13 +1079,7 @@ exports.updateUser = async (req, res) => {
  * DELETE /api/admin/users/:id
  *
  * Menghapus pengguna secara permanen (hard delete).
- * Peringatan: Tindakan ini tidak dapat dibatalkan.
- *
- * Aturan keamanan:
- * - Admin tidak dapat menghapus akun dirinya sendiri.
- * - Tidak boleh menghapus satu-satunya admin yang tersisa di sistem.
- * - User yang memiliki relasi data (MarketingKit, Service) tidak dapat dihapus
- *   sampai data tersebut dialihkan atau dihapus terlebih dahulu.
+ * Akan gagal jika masih ada data terkait (marketing kit, service) atau admin terakhir.
  */
 exports.deleteUser = async (req, res) => {
   try {
@@ -1041,7 +1088,6 @@ exports.deleteUser = async (req, res) => {
       return res.status(404).json({ success: false, pesan: 'Pengguna tidak ditemukan' });
     }
 
-    // Cegah penghapusan akun sendiri
     if (String(req.params.id) === String(req.user.id)) {
       return res.status(400).json({
         success: false,
@@ -1049,7 +1095,6 @@ exports.deleteUser = async (req, res) => {
       });
     }
 
-    // Perlindungan untuk role admin: minimal satu admin harus tersisa
     if (user.role === 'admin') {
       const totalAdmin = await User.count({ where: { role: 'admin' } });
       if (totalAdmin <= 1) {
@@ -1060,13 +1105,11 @@ exports.deleteUser = async (req, res) => {
       }
     }
 
-    // Revoke semua refresh token sebelum hapus
     await RefreshToken.update(
       { is_revoked: true },
       { where: { user_id: req.params.id } }
     );
 
-    // Cek ketergantungan data (foreign key)
     const [relatedKits, relatedServices] = await Promise.all([
       MarketingKit.count({ where: { uploaded_by: req.params.id } }),
       Service.count({ where: { created_by: req.params.id } }),
@@ -1089,8 +1132,6 @@ exports.deleteUser = async (req, res) => {
     return res.json({ success: true, pesan: `Pengguna ${user.full_name} berhasil dihapus` });
   } catch (error) {
     console.error('[deleteUser] Error:', error);
-
-    // Tangani foreign key constraint lainnya (fallback)
     if (error.name === 'SequelizeForeignKeyConstraintError') {
       const match = error.parent?.sqlMessage?.match(/FOREIGN KEY \(`(\w+)`\) REFERENCES `(\w+)`/);
       const foreignTable = match ? match[2] : 'data terkait';

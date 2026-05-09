@@ -7,7 +7,7 @@
  * ============================================================
  * TUJUAN
  * ============================================================
- * [Fix N30] Menyatukan semua logika validasi di satu tempat sehingga:
+ * Menyatukan semua logika validasi di satu tempat sehingga:
  *   - Perubahan aturan validasi cukup di satu file
  *   - Pesan error konsisten di seluruh aplikasi
  *   - Mudah diperluas dengan aturan baru
@@ -168,7 +168,7 @@ function isNonEmptyString(value) {
 
 /**
  * Memvalidasi apakah nilai adalah angka positif (>= 0).
- * [Fix #12] Digunakan untuk validasi revenue di serviceController.
+ * Digunakan untuk validasi revenue di serviceController.
  *
  * @param {any} value - Nilai yang akan divalidasi
  * @returns {boolean} true jika nilai adalah angka dan >= 0
@@ -198,7 +198,7 @@ function isValidYear(value) {
 
 /**
  * Mem-parsing dan memvalidasi parameter pagination dari query string.
- * [Fix N35] Menerapkan batas maksimum untuk mencegah data dump.
+ * Menerapkan batas maksimum untuk mencegah data dump.
  *
  * @param {Object} query - req.query dari Express
  * @param {number} [maxLimit=MAX_PAGINATION_LIMIT] - Batas maksimum override

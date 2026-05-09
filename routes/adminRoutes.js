@@ -1,15 +1,43 @@
-// =============================================================================
-// routes/adminRoutes.js
-// =============================================================================
-// Semua endpoint di file ini mengelola operasi administrasi sistem SAKTI,
-// termasuk manajemen user, verifikasi pendaftaran, reset password,
-// permintaan pindah unit, dan log download.
-//
-// Base path: /api/admin
-// Seluruh route dilindungi oleh middleware:
-//   authenticate - memastikan user login (JWT valid)
-//   authorize('admin') - memastikan role user adalah 'admin'
-// =============================================================================
+/**
+ * routes/adminRoutes.js
+ *
+ * Mengelola semua endpoint administrasi sistem SAKTI:
+ * - Dashboard statistik
+ * - Manajemen pengguna (CRUD, filter, pagination, temporary password)
+ * - Verifikasi pendaftaran (approve/reject)
+ * - Permintaan reset password (admin-driven)
+ * - Permintaan perubahan unit dan/atau role (approve/reject)
+ * - Log download marketing kit
+ *
+ * Base path: /api/admin
+ *
+ * ============================================================
+ * KEAMANAN
+ * ============================================================
+ * Semua endpoint dilindungi oleh middleware:
+ *   - authenticate : memastikan user login (JWT valid)
+ *   - authorize('admin') : memastikan role user adalah 'admin'
+ *
+ * Tidak ada pengecekan role inline di controller karena sudah ditangani di sini.
+ *
+ * ============================================================
+ * ENDPOINT GROUPS
+ * ============================================================
+ * 1. Dashboard          : GET /dashboard
+ * 2. User Management    : CRUD users + temporary-password
+ * 3. Waiting Users      : GET, approve, reject
+ * 4. Password Reset     : GET requests, POST reset
+ * 5. Unit/Role Change   : GET change-requests, PUT process
+ * 6. Audit Logs         : GET download-logs
+ *
+ * ============================================================
+ * PANDUAN MAINTENANCE
+ * ============================================================
+ * - Semua route yang memerlukan akses admin menggunakan middleware `adminOnly`.
+ * - Jika ada endpoint baru yang membutuhkan akses admin, cukup tambahkan ke grup yang sesuai.
+ * - Jangan lupa untuk menambahkan controller yang sesuai di `adminController.js`.
+ * - Perhatikan penggunaan `ctrl.processChangeRequest` (endpoint baru) untuk perubahan role+unit.
+ */
 
 const express = require('express');
 const router = express.Router();
@@ -22,149 +50,143 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 const adminOnly = [authenticate, authorize('admin')];
 
 // =============================================================================
-// Dashboard
+// 1. Dashboard
 // =============================================================================
 
 /**
  * GET /api/admin/dashboard
  *
- * Menampilkan statistik ringkasan untuk halaman dashboard admin.
- * Data yang dikembalikan: total pengguna terverifikasi, pengguna menunggu verifikasi,
- * pengguna aktif 30 hari terakhir, total download, permintaan pindah unit pending,
- * dan permintaan reset password yang belum diproses.
+ * Mengembalikan statistik ringkasan:
+ * - total_pengguna
+ * - menunggu_verifikasi
+ * - pengguna_aktif_30_hari
+ * - total_download
+ * - permintaan_pindah_unit
+ * - permintaan_reset_password
  */
 router.get('/dashboard', ...adminOnly, ctrl.getDashboardStats);
 
 // =============================================================================
-// Manajemen User (CRUD + filter + pagination)
+// 2. Manajemen Pengguna (CRUD + filter + pagination)
 // =============================================================================
 
 /**
  * GET /api/admin/users
  *
- * Mendapatkan daftar semua pengguna dengan dukungan:
- * - Pencarian (search) by name/email
- * - Filter by role, unit, status aktif, status verifikasi
- * - Sorting (whitelist kolom aman)
- * - Pagination (dengan batas maksimum 100 item per halaman)
+ * Mendapatkan daftar semua pengguna.
+ * Query params: search, role, unit, is_active, verified, sort, direction, page, limit
  */
 router.get('/users', ...adminOnly, ctrl.getAllUsers);
 
 /**
  * POST /api/admin/users
  *
- * Membuat akun pengguna baru secara langsung oleh admin.
- * Password di-generate secara acak (96-bit entropy) dan dikembalikan sekali dalam response.
- * User yang dibuat langsung diverifikasi (is_verified = true).
+ * Membuat akun pengguna baru. Password sementara di-generate acak.
+ * User langsung diverifikasi (is_verified = true).
  */
 router.post('/users', ...adminOnly, ctrl.createUser);
 
 /**
  * PUT /api/admin/users/:id
  *
- * Memperbarui data pengguna (email, nama, role, unit, status aktif, status verifikasi).
- * Hanya field yang dikirim yang akan diubah.
+ * Memperbarui data pengguna (field yang dikirim saja).
+ * Dapat mengubah nama, email, role, unit, status aktif, status verifikasi.
  */
 router.put('/users/:id', ...adminOnly, ctrl.updateUser);
 
 /**
  * DELETE /api/admin/users/:id
  *
- * Menghapus pengguna secara permanen (hard delete).
- * Peringatan: Admin tidak dapat menghapus akun sendiri, dan tidak boleh menghapus
- * satu-satunya admin yang tersisa di sistem.
+ * Menghapus akun pengguna secara permanen.
+ * Cegah penghapusan admin terakhir dan akun sendiri.
  */
 router.delete('/users/:id', ...adminOnly, ctrl.deleteUser);
 
 /**
  * GET /api/admin/users/:id/temporary-password
  *
- * Mengambil password sementara pengguna yang masih aktif (belum diganti).
- * Password didekripsi dari kolom `temporary_password` (AES-256-CBC).
- * Endpoint ini berguna jika admin lupa mencatat password saat membuat akun.
+ * Mendapatkan password sementara pengguna (jika masih ada).
+ * Password didekripsi AES-256-CBC.
  */
 router.get('/users/:id/temporary-password', ...adminOnly, ctrl.getTemporaryPassword);
 
 // =============================================================================
-// Verifikasi Pendaftaran (User dengan is_verified = null)
+// 3. Verifikasi Pendaftaran (User dengan is_verified = null)
 // =============================================================================
 
 /**
  * GET /api/admin/waiting-users
  *
- * Mendapatkan daftar pengguna yang menunggu verifikasi (is_verified = null).
- * Diurutkan dari yang paling lama mendaftar (FIFO).
+ * Daftar pengguna yang menunggu persetujuan (FIFO berdasarkan created_at).
  */
 router.get('/waiting-users', ...adminOnly, ctrl.getWaitingUsers);
 
 /**
  * POST /api/admin/waiting-users/:id/approve
  *
- * Menyetujui pendaftaran pengguna (set is_verified = true).
- * Hanya dapat dilakukan jika status masih pending (null).
+ * Menyetujui pendaftaran (set is_verified = true).
+ * Hanya jika status masih null.
  */
 router.post('/waiting-users/:id/approve', ...adminOnly, ctrl.approveUser);
 
 /**
  * POST /api/admin/waiting-users/:id/reject
  *
- * Menolak pendaftaran pengguna (set is_verified = false).
- * Hanya dapat dilakukan jika status masih pending (null).
+ * Menolak pendaftaran (hapus user) jika tidak memiliki data terkait (marketing kit, service).
+ * Hanya jika status masih null.
  */
 router.post('/waiting-users/:id/reject', ...adminOnly, ctrl.rejectUser);
 
 // =============================================================================
-// Permintaan Reset Password (User → Admin)
+// 4. Permintaan Reset Password (Admin-driven)
 // =============================================================================
 
 /**
  * GET /api/admin/password-reset-requests
  *
  * Mendapatkan daftar permintaan reset password yang belum diproses.
- * Hanya satu permintaan terawal per pengguna yang ditampilkan.
+ * Satu permintaan terawal per user.
  */
 router.get('/password-reset-requests', ...adminOnly, ctrl.getPasswordResetRequests);
 
 /**
  * POST /api/admin/password-reset-requests/:id/reset
  *
- * Mereset password pengguna ke password acak yang kuat (96-bit entropy).
- * Password sementara dienkripsi dan disimpan di kolom `temporary_password`.
- * Response mengembalikan password sementara SEKALI untuk disampaikan ke user.
+ * Mereset password user ke password acak.
+ * Password sementara dienkripsi dan disimpan, refresh token direvoke.
  */
 router.post('/password-reset-requests/:id/reset', ...adminOnly, ctrl.resetUserPassword);
 
 // =============================================================================
-// Permintaan Perubahan Unit Kerja
+// 5. Permintaan Perubahan Unit dan/atau Role
 // =============================================================================
 
 /**
- * GET /api/admin/unit-change-requests
+ * GET /api/admin/change-requests
  *
- * Mendapatkan daftar permintaan perubahan unit kerja.
- * Mendukung filter status (pending/approved/rejected) dan pagination.
+ * Mendapatkan daftar semua permintaan perubahan (role dan/atau unit).
+ * Mendukung filter status dan pagination.
  */
-router.get('/unit-change-requests', ...adminOnly, ctrl.getUnitChangeRequests);
+router.get('/change-requests', ...adminOnly, ctrl.getChangeRequests);
 
 /**
- * PUT /api/admin/unit-change-requests/:request_id/process
+ * PUT /api/admin/change-requests/:request_id/process
  *
- * Memproses permintaan perubahan unit (approve atau reject).
- * Operasi bersifat atomik menggunakan database transaction:
- * - Approve: mengubah unit_kerja_id user dan status request menjadi 'approved'
- * - Reject: hanya mengubah status request menjadi 'rejected'
+ * Memproses permintaan perubahan role dan/atau unit secara atomik.
+ * Action dapat berupa 'approve' atau 'reject'.
+ * Jika approve: akan mengupdate role dan/atau unit user sesuai permintaan.
  */
-router.put('/unit-change-requests/:request_id/process', ...adminOnly, ctrl.processUnitChangeRequest);
+router.put('/change-requests/:request_id/process', ...adminOnly, ctrl.processChangeRequest);
 
 // =============================================================================
-// Audit Logs
+// 6. Audit Logs
 // =============================================================================
 
 /**
  * GET /api/admin/download-logs
  *
  * Mendapatkan log semua aktivitas download marketing kit.
- * Mendukung pencarian berdasarkan nama kit, nama user, atau tujuan download.
+ * Mendukung pencarian (search) berdasarkan nama kit, nama user, atau tujuan.
  */
 router.get('/download-logs', ...adminOnly, ctrl.getDownloadLogs);
 

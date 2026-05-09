@@ -5,20 +5,6 @@
  * Sektor merepresentasikan bidang industri/pasar yang dilayani;
  * Sub Sektor adalah spesialisasi lebih dalam di bawah sektor.
  *
- * ============================================================
- * DAFTAR PERBAIKAN DALAM FILE INI
- * ============================================================
- * [Fix #13 — Low]     Pola `value || existing` pada update functions.
- *   → Ganti dengan `!== undefined` check + validasi eksplisit.
- *
- * [Fix N35 — Medium]  Tidak ada max pagination limit (data master kecil,
- *   tetap aman. GET all mengembalikan semua data untuk kebutuhan dropdown.
- *
- * [Fix N38 — Low]     name dan code tidak di-trim sebelum digunakan.
- *   → Tambahkan .trim() pada semua input string.
- *
- * [Fix N50 — Low]     Response message dalam Bahasa Inggris.
- *   → Semua response message diubah ke Bahasa Indonesia.
  *
  * ============================================================
  * DESAIN KEPUTUSAN
@@ -158,8 +144,8 @@ exports.getSectorById = async (req, res) => {
  *
  * Membuat sektor baru.
  *
- * [Fix N38] Nama dan kode di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Nama dan kode di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.createSector = async (req, res) => {
   try {
@@ -213,9 +199,9 @@ exports.createSector = async (req, res) => {
  *
  * Memperbarui data sektor (nama dan/atau kode).
  *
- * [Fix #13] Menggunakan `name !== undefined` bukan `name || sector.name`.
- * [Fix N38] Nama dan kode di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Menggunakan `name !== undefined` bukan `name || sector.name`.
+ * Nama dan kode di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  *
  * Penjelasan perbaikan:
  * Sebelumnya: `name: name || sector.name` → jika name = "" (string kosong)
@@ -334,8 +320,8 @@ exports.deleteSector = async (req, res) => {
  *
  * Membuat sub sektor baru di bawah sektor tertentu.
  *
- * [Fix N38] Nama dan kode di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Nama dan kode di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.createSubSector = async (req, res) => {
   try {
@@ -404,9 +390,9 @@ exports.createSubSector = async (req, res) => {
  * Memperbarui data sub sektor (nama dan/atau kode).
  * Sub sektor harus milik sektor yang sesuai di URL (keamanan data).
  *
- * [Fix #13] Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
- * [Fix N38] Nama dan kode di-trim sebelum validasi.
- * [Fix N50] Response menggunakan Bahasa Indonesia.
+ * Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
+ * Nama dan kode di-trim sebelum validasi.
+ * Response menggunakan Bahasa Indonesia.
  */
 exports.updateSubSector = async (req, res) => {
   try {

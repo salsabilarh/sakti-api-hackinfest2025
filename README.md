@@ -32,7 +32,6 @@
 - [API Reference Lengkap](#-api-reference-lengkap)
 - [Instalasi & Setup Lokal](#️-instalasi--setup-lokal)
 - [Environment Variables](#-environment-variables)
-- [Bug Fix Log](#-bug-fix-log)
 - [Deployment Checklist](#-deployment-checklist)
 - [Keputusan Teknis (Why)](#-keputusan-teknis-why)
 
@@ -724,11 +723,6 @@ Argon2 memenangkan Password Hashing Competition (PHC) 2015. Memory-hard algorith
 ### Mengapa file langsung di-stream ke Cloudinary?
 
 Server yang menyimpan file adalah target serangan. Dengan stream Multer → Cloudinary, file sensitif tidak pernah ada di server SAKTI. Jika server dikompromis, file tetap aman di CDN terpisah dengan access control sendiri. Bonus: auto-CDN, tidak perlu maintain storage server.
-
-### Mengapa setiap bug fix diberi label `[Fix #N]`?
-
-Keterlacakan penuh — jika bug serupa muncul kembali (regression), developer langsung tahu histori. Knowledge transfer — developer baru memahami alasan kode ditulis dengan cara tertentu. Ini adalah investasi dokumentasi, bukan overhead.
-
 ---
 
 *Dibuat untuk Hackin Fest 2025 — PT Sucofindo | Juara 1 Kategori Inovasi Layanan*

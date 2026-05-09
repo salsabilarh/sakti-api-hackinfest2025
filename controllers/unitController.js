@@ -205,9 +205,9 @@ exports.getUnitById = async (req, res) => {
  *
  * Membuat unit kerja baru. Endpoint ini hanya dapat diakses oleh admin.
  *
- * [Fix #14] Menyertakan field `code` yang sebelumnya diabaikan.
- * [Fix N38] Melakukan trim pada name dan code sebelum validasi.
- * [Fix N50] Response dalam Bahasa Indonesia.
+ * Menyertakan field `code` yang sebelumnya diabaikan.
+ * Melakukan trim pada name dan code sebelum validasi.
+ * Response dalam Bahasa Indonesia.
  *
  * @body {string} name - Nama unit (wajib)
  * @body {string} [code] - Kode unit (opsional, harus unik jika diberikan)
@@ -255,7 +255,7 @@ exports.createUnit = async (req, res) => {
       }
     }
 
-    // [Fix #14] Sertakan code dalam create
+    // Sertakan code dalam create
     const unit = await Unit.create({
       name: trimmedName,
       code: trimmedCode || null,
@@ -290,8 +290,8 @@ exports.createUnit = async (req, res) => {
  * Memperbarui data unit kerja secara parsial (hanya field yang dikirim).
  * Endpoint ini hanya untuk admin.
  *
- * [Fix #13] Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
- * [Fix N38] Melakukan trim sebelum validasi.
+ * Menggunakan `!== undefined` untuk membedakan field tidak dikirim.
+ * Melakukan trim sebelum validasi.
  *
  * @body {string} [name] - Nama unit baru
  * @body {string} [code] - Kode unit baru (boleh kosong untuk menghapus kode)

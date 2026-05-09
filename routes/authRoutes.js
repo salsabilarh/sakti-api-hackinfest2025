@@ -5,31 +5,34 @@
  * Base path: /api/auth
  *
  * ============================================================
- * ARSITEKTUR DUAL-TOKEN (Fix N24)
+ * ARSITEKTUR DUAL-TOKEN
  * ============================================================
- * POST   /login              → access_token + refresh_token
+ * POST   /login              → access_token (short-lived) + refresh_token
  * POST   /refresh            → tukar refresh_token → access_token baru
- * DELETE /logout             → revoke satu refresh_token (logout dari device ini)
- * DELETE /logout-all         → revoke semua refresh_token (logout dari semua device)
+ * DELETE /logout             → revoke satu refresh_token (logout satu perangkat)
+ * DELETE /logout-all         → revoke semua refresh_token (logout semua perangkat)
  *
  * ============================================================
- * KEAMANAN RATE LIMITING (Fix N28)
+ * KEAMANAN RATE LIMITING
  * ============================================================
- * Endpoint publik yang sensitif dilindungi oleh rate limiter:
- * - POST /register           mencegah spam pendaftaran akun
- * - POST /login              mencegah brute force attack
- * - POST /forgot-password    mencegah spam permintaan reset
- * - POST /refresh            mencegah enumerasi session
+ * Endpoint publik yang sensitif dilindungi rate limiter (10 req/15 menit):
+ *   - POST /register           → cegah spam pendaftaran
+ *   - POST /login              → cegah brute force
+ *   - POST /forgot-password    → cegah spam permintaan reset
+ *   - POST /refresh            → cegah enumerasi session
  *
  * Rate limiter diambil dari `req.app.locals.loginLimiter` (dikonfigurasi di app.js).
+ * Jika tidak tersedia (test/development), middleware no-op digunakan.
  *
  * ============================================================
  * PANDUAN MAINTENANCE
  * ============================================================
- * - Semua endpoint yang memerlukan autentikasi menggunakan middleware `authenticate`
- * - Endpoint `/unit-change-request` juga menggunakan `denyRole('admin')` karena
- *   admin tidak memiliki unit kerja dan tidak boleh mengajukan pindah unit.
- * - Jika perlu menambah endpoint publik sensitif, pastikan menambahkan rate limiter.
+ * - Endpoint terautentikasi: gunakan middleware `authenticate`
+ * - Endpoint khusus user non-admin: tambahkan `denyRole('admin')`
+ * - Jika endpoint publik baru ditambahkan, pastikan memakai `loginRateLimit`
+ * - Controller functions: lihat `controllers/authController.js`
+ *
+ * @module authRoutes
  */
 
 // ============================================================
@@ -57,7 +60,11 @@ function getLoginLimiter(req) {
 
 /**
  * Middleware wrapper untuk rate limiting pada endpoint sensitif.
- * Jika rate limiter tidak dikonfigurasi, lanjutkan tanpa pembatasan (development).
+ * Jika rate limiter tidak dikonfigurasi, lanjutkan tanpa pembatasan (development/test).
+ *
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {Function} next - Express next function
  */
 const loginRateLimit = (req, res, next) => {
   const limiter = getLoginLimiter(req);
@@ -78,10 +85,12 @@ const loginRateLimit = (req, res, next) => {
  *
  * @body {string} full_name - Nama lengkap
  * @body {string} email - Alamat email
- * @body {string} password - Password (minimal 8 karakter, mengandung huruf besar, huruf kecil, angka, simbol)
+ * @body {string} password - Password (minimal 8 karakter, huruf besar, huruf kecil, angka, simbol)
  * @body {string} confirm_password - Konfirmasi password (harus sama)
  * @body {string} unit_kerja_id - ID unit kerja (wajib untuk role non-admin)
  * @body {string} role - Role yang dipilih (management/viewer)
+ * @throws {400} Jika field wajib tidak diisi atau tidak valid
+ * @throws {409} Jika email sudah terdaftar
  */
 router.post('/register', loginRateLimit, ctrl.register);
 
@@ -96,6 +105,8 @@ router.post('/register', loginRateLimit, ctrl.register);
  * @body {string} email
  * @body {string} password
  * @returns {object} { access_token, refresh_token, expires_in, user_data }
+ * @throws {401} Jika email atau password salah
+ * @throws {403} Jika akun belum diverifikasi atau dinonaktifkan
  */
 router.post('/login', loginRateLimit, ctrl.login);
 
@@ -107,6 +118,7 @@ router.post('/login', loginRateLimit, ctrl.login);
  *
  * @body {string} refresh_token
  * @returns {object} { access_token, expires_in }
+ * @throws {401} Jika refresh token tidak valid, expired, atau telah direvoke
  */
 router.post('/refresh', loginRateLimit, ctrl.refreshToken);
 
@@ -116,9 +128,11 @@ router.post('/refresh', loginRateLimit, ctrl.refreshToken);
  * Mengajukan permintaan reset password ke admin.
  * Endpoint ini tidak mengirim email langsung, tetapi membuat entri di
  * tabel password_reset_requests untuk diproses oleh admin.
+ * Response sama untuk email terdaftar maupun tidak (mencegah enumeration).
  *
  * @body {string} email
- * @returns {object} pesan sukses (sama untuk email terdaftar maupun tidak)
+ * @returns {object} pesan sukses (selalu sama)
+ * @throws {400} Jika email tidak diisi
  */
 router.post('/forgot-password', loginRateLimit, ctrl.forgotPassword);
 
@@ -133,6 +147,9 @@ router.post('/forgot-password', loginRateLimit, ctrl.forgotPassword);
  * (bukan hanya dari JWT payload) sehingga selalu up-to-date.
  *
  * @header Authorization: Bearer <access_token>
+ * @returns {object} Data profil user (nama, email, role, unit, dll)
+ * @throws {401} Jika token tidak valid
+ * @throws {404} Jika user tidak ditemukan
  */
 router.get('/profile', authenticate, ctrl.getProfile);
 
@@ -146,6 +163,9 @@ router.get('/profile', authenticate, ctrl.getProfile);
  * @body {string} current_password
  * @body {string} new_password
  * @body {string} confirm_password
+ * @throws {400} Jika field tidak lengkap atau password lemah
+ * @throws {401} Jika password lama salah
+ * @throws {500} Jika gagal menyimpan password baru
  */
 router.put('/update-password', authenticate, ctrl.updatePassword);
 
@@ -156,6 +176,9 @@ router.put('/update-password', authenticate, ctrl.updatePassword);
  * Refresh token yang digunakan harus dikirim dalam body.
  *
  * @body {string} refresh_token
+ * @returns {object} { success: true, pesan: string }
+ * @throws {400} Jika refresh token tidak disertakan
+ * @throws (tidak ada error yang dilempar ke client, selalu return 200)
  */
 router.delete('/logout', authenticate, ctrl.logout);
 
@@ -164,24 +187,33 @@ router.delete('/logout', authenticate, ctrl.logout);
  *
  * Logout dari semua perangkat (merevoke semua refresh token milik user).
  * Berguna jika ada indikasi akun diretas atau ingin keamanan ekstra.
+ *
+ * @returns {object} { success: true, pesan: string, jumlah sesi direvoke }
+ * @throws {500} Jika gagal melakukan revoke (tetap return 200 untuk keamanan)
  */
 router.delete('/logout-all', authenticate, ctrl.logoutAll);
 
 /**
- * POST /api/auth/unit-change-request
+ * POST /api/auth/change-request
  *
- * Mengajukan permintaan pindah unit kerja ke admin.
+ * Mengajukan permintaan perubahan role dan/atau unit kerja ke admin.
  * Hanya user dengan role selain 'admin' yang dapat mengakses endpoint ini.
+ * Minimal salah satu dari `requested_role` atau `requested_unit_id` harus diisi.
+ * Satu user hanya boleh memiliki satu permintaan pending.
  *
- * @body {string} requested_unit_id - ID unit tujuan
+ * @body {string} [requested_role] - Role yang diminta ('management' atau 'viewer')
+ * @body {string} [requested_unit_id] - ID unit tujuan
  * @middleware authenticate - memastikan user login
- * @middleware denyRole('admin') - admin tidak memiliki unit kerja, tidak boleh mengajukan
+ * @middleware denyRole('admin') - admin tidak boleh mengajukan perubahan
+ * @throws {400} Jika tidak ada field yang diisi atau data tidak valid
+ * @throws {409} Jika sudah ada permintaan pending
+ * @throws {404} Jika unit tujuan tidak ditemukan atau user tidak ditemukan
  */
 router.post(
-  '/unit-change-request',
+  '/change-request',
   authenticate,
   denyRole('admin'),
-  ctrl.requestUnitChange
+  ctrl.requestChange
 );
 
 // ============================================================

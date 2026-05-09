@@ -12,13 +12,6 @@
  * 4. Global error handler
  *
  * ============================================================
- * PERBAIKAN DALAM FILE INI
- * ============================================================
- * [Fix #1]   Duplicate route registration adminRoutes → dihapus.
- * [Fix N28]  Rate limiting khusus untuk endpoint login (loginLimiter).
- * [Fix N44]  Body size limit ditambahkan (2mb).
- *
- * ============================================================
  * ENVIRONMENT VARIABLES YANG DIGUNAKAN
  * ============================================================
  * NODE_ENV         - development, test, atau production
@@ -102,7 +95,7 @@ function skipRateLimit() {
  * 100 request per 15 menit per IP.
  */
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,          // 15 menit
+  windowMs: 15 * 60 * 1000,           // 15 menit
   max: 100,                           // 100 request per window
   standardHeaders: true,              // Kirim header RateLimit-* standar
   legacyHeaders: false,               // Matikan header X-RateLimit-* lama
@@ -118,10 +111,10 @@ const globalLimiter = rateLimit({
  * Mencegah brute force attack pada login, register, forgot-password.
  * Hanya percobaan GAGAL yang dihitung (skipSuccessfulRequests: true).
  *
- * [Fix N28] Batas lebih ketat: 10 percobaan per 15 menit.
+ * Batas lebih ketat: 10 percobaan per 15 menit.
  */
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,          // 15 menit
+  windowMs: 15 * 60 * 1000,           // 15 menit
   max: 10,                            // 10 percobaan per window
   standardHeaders: true,
   legacyHeaders: false,
@@ -161,7 +154,7 @@ app.use(logger(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 /**
  * Body parsers dengan batas ukuran eksplisit.
- * [Fix N44] Mencegah request body terlalu besar yang dapat menyebabkan memory pressure.
+ * Mencegah request body terlalu besar yang dapat menyebabkan memory pressure.
  */
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
@@ -175,13 +168,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ============================================================================
 // Routes
 // ============================================================================
-
-/**
- * CATATAN PENTING (Fix #1):
- * Setiap route group didaftarkan SATU KALI dengan base path yang benar.
- * adminRoutes sebelumnya didaftarkan dua kali (di '/api/users' DAN '/api/admin').
- * Registrasi '/api/users' telah dihapus — hanya '/api/admin' yang digunakan.
- */
 
 // --- Autentikasi ---
 // loginLimiter akan digunakan secara selektif di dalam authRoutes
@@ -231,7 +217,7 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================================
-// Ekspor loginLimiter untuk digunakan di authRoutes
+// Ekspor rate limiters untuk digunakan di authRoutes
 // ============================================================================
 app.locals.loginLimiter = loginLimiter;
 app.locals.globalLimiter = globalLimiter;

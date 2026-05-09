@@ -1,38 +1,44 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('units', {
       id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         primaryKey: true,
-        defaultValue: Sequelize.UUIDV4,
+        allowNull: false,
+        collate: 'utf8mb4_bin'
       },
       name: {
         type: Sequelize.STRING(100),
-        allowNull: false,
-        unique: true,
+        allowNull: false
       },
       type: {
         type: Sequelize.ENUM('sbu', 'ppk', 'cabang', 'unit', 'divisi', 'lainnya'),
-        allowNull: false,
+        allowNull: false
+      },
+      code: {
+        type: Sequelize.STRING(20),
+        unique: true,
+        allowNull: true
       },
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
       updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
-      },
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+      }
     });
 
+    // Additional indexes
     await queryInterface.addIndex('units', ['type']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('units');
   }
 };
