@@ -710,17 +710,6 @@ FRONTEND_URL=https://sakti-drab.vercel.app  # untuk link di body email
 # RATE_LIMIT_SKIP=true   # Nonaktifkan rate limiting — HANYA untuk testing lokal
 ```
 
-> **⚠️ Keamanan**: Jangan pernah commit file `.env` ke repository.
-> Pastikan `.gitignore` mencakup `.env`.
->
-> Jika `.env` terlanjur ter-commit, bersihkan dengan:
-> ```bash
-> git filter-branch --force --index-filter \
->   "git rm --cached --ignore-unmatch .env" \
->   --prune-empty --tag-name-filter cat -- --all
-> ```
-> Kemudian **rotate semua credentials** (JWT secrets, Cloudinary API, DB password, SMTP password).
-
 ---
 
 ## 🚀 Deployment Checklist
